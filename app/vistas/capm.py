@@ -165,13 +165,14 @@ def render(ctx):
     st.subheader("Tasa libre de riesgo y mercado")
     c1, c2, c3 = st.columns(3)
     c1.metric("Tasa libre de riesgo", f"{rf_now:.2%}",
-              f"plazo {plazo_usado}", delta_color="off")
+              f"plazo {plazo_usado}", delta_color="off", delta_arrow="off")
     por_mercado = {indice_de[t]: r["E_Rm"] for t, r in resultados.items()}
     if len(set(por_mercado.values())) == 1:
         E_Rm = next(iter(por_mercado.values()))
         c2.metric("E[Rm]", f"{E_Rm:.2%}",
                   "rf + prima" if params_capm.market_method == "prima"
-                  else "media historica", delta_color="off")
+                  else "media historica",
+                  delta_color="off", delta_arrow="off")
         c3.metric("Prima de mercado", f"{E_Rm - rf_now:.2%}")
     else:
         c2.metric("E[Rm]", "varia por indice")
@@ -194,7 +195,7 @@ def render(ctx):
         "market": "indice", "currency": "moneda", "n": "periodos",
         "beta": "beta", "beta_adj": "beta ajustada", "beta_p": "p beta",
         "alpha_annual": "alfa anual", "alpha_p": "p alfa", "r2": "R2",
-        "share_systematic": "riesgo sistematico",
+        "vol_idiosyncratic": "vol. idiosincratica",
         "mean_annual": "rend. historico", "volatility_annual": "volatilidad",
         "required_return": "rend. requerido", "sharpe": "Sharpe",
         "treynor": "Treynor"}
@@ -203,7 +204,7 @@ def render(ctx):
         vista_tabla.sort_values("beta", ascending=False).style.format({
             "beta": "{:.3f}", "beta ajustada": "{:.3f}", "p beta": "{:.4f}",
             "alfa anual": "{:.2%}", "p alfa": "{:.4f}", "R2": "{:.3f}",
-            "riesgo sistematico": "{:.1%}", "rend. historico": "{:.2%}",
+            "vol. idiosincratica": "{:.2%}", "rend. historico": "{:.2%}",
             "volatilidad": "{:.2%}", "rend. requerido": "{:.2%}",
             "Sharpe": "{:.3f}", "Treynor": "{:.4f}"}),
         width="stretch")
@@ -221,15 +222,21 @@ def render(ctx):
         width="stretch")
     d1, d2, d3, d4 = st.columns(4)
     d1.metric("Beta", f"{r['beta']:.3f}",
-              f"ajustada {r['beta_adj']:.3f}", delta_color="off",
+              f"ajustada {r['beta_adj']:.3f}",
+              delta_color="off", delta_arrow="off",
               help="Ajuste de Blume: 0.67 beta + 0.33. Las betas tienden a "
                    "regresar a 1 con el tiempo.")
     d2.metric("Alfa de Jensen anual", f"{r['alpha_annual']:.2%}",
-              f"p-valor {r['alpha_p']:.3f}", delta_color="off")
+              f"p-valor {r['alpha_p']:.3f}",
+              delta_color="off", delta_arrow="off")
     d3.metric("R2", f"{r['r2']:.3f}",
-              f"{r['share_systematic']:.0%} del riesgo es sistematico",
-              delta_color="off",
-              help="El resto es riesgo idiosincratico: el que se puede "
-                   "eliminar diversificando y que el CAPM no remunera.")
+              f"vol. idiosincratica {r['vol_idiosyncratic']:.2%}",
+              delta_color="off", delta_arrow="off",
+              help="Fraccion de la varianza del activo que explica el "
+                   "mercado: su riesgo sistematico. El resto es riesgo "
+                   "idiosincratico, el que se puede eliminar diversificando "
+                   "y que el CAPM no remunera; su volatilidad anual es la "
+                   "desviacion de los residuos de la regresion.")
     d4.metric("Rendimiento requerido", f"{r['required_return']:.2%}",
-              f"historico {r['mean_annual']:.2%}", delta_color="off")
+              f"historico {r['mean_annual']:.2%}",
+              delta_color="off", delta_arrow="off")

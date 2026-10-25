@@ -8,7 +8,7 @@ statsmodels==0.14.6
 yfinance==1.0
 
 # Interfaz — flexibles: no afectan ningun resultado numerico
-streamlit>=1.40
+streamlit>=1.66
 plotly>=6.5
 matplotlib>=3.10
 

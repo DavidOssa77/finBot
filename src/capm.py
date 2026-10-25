@@ -72,8 +72,14 @@ def regress(ex, m):
     m --> periodos por año
 
     Devuelve un diccionario con beta cruda y ajustada (Blume), alfa de
-    Jensen por periodo y anualizada con su p-valor, R^2, y la
-    descomposicion de la varianza anual en sistematica e idiosincratica.
+    Jensen por periodo y anualizada con su p-valor, R^2, la
+    descomposicion de la varianza anual en sistematica e idiosincratica,
+    y la volatilidad idiosincratica anual.
+
+    La fraccion sistematica de la varianza coincide con el R^2 (con
+    intercepto, var(y) = var(ajuste) + var(residuo)); por eso no se
+    reporta aparte: la volatilidad idiosincratica es la que agrega
+    informacion, en puntos de volatilidad.
     """
     X = sm.add_constant(ex["market"])
     fit = sm.OLS(ex["asset"], X).fit()
@@ -96,7 +102,7 @@ def regress(ex, m):
         "r2": fit.rsquared,
         "var_systematic": sistematica,
         "var_idiosyncratic": idiosincratica,
-        "share_systematic": sistematica / (sistematica + idiosincratica),
+        "vol_idiosyncratic": np.sqrt(idiosincratica),
         "resid": fit.resid,
     }
 
@@ -164,7 +170,7 @@ def analyze_asset(asset, market, rf, rf_now, params):
 
 
 COLUMNAS = ["market", "currency", "n", "beta", "beta_adj", "beta_p",
-            "alpha_annual", "alpha_p", "r2", "share_systematic",
+            "alpha_annual", "alpha_p", "r2", "vol_idiosyncratic",
             "mean_annual", "volatility_annual", "required_return",
             "sharpe", "treynor", "excess_annual", "market_excess_annual"]
 
