@@ -216,3 +216,77 @@ def regression_chart(ex, alpha, beta, ticker, mercado):
         yaxis=dict(title=f"exceso de {ticker}", tickformat=".1%"),
         legend=dict(orientation="h", y=-0.2))
     return fig
+
+def frontier_chart(frontera, activos, portafolios, elegido, rf=None):
+    """Frontera eficiente, activos individuales y portafolios de referencia.
+
+    frontera --> DataFrame de portfolio.efficient_frontier
+    activos --> DataFrame por ticker con columnas return y volatility
+    portafolios --> DataFrame portafolio x (return, volatility, sharpe)
+    elegido --> nombre del portafolio que se resalta
+    rf --> tasa libre de riesgo; si se pasa y el tangente existe, se
+           dibuja la linea del mercado de capitales hasta el
+    """
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=frontera["volatility"], y=frontera["return"], mode="lines",
+        name="frontera eficiente", line=dict(width=2.5),
+        hovertemplate="volatilidad %{x:.2%}<br>retorno %{y:.2%}"
+                      "<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=activos["volatility"], y=activos["return"], mode="markers+text",
+        text=activos.index, textposition="top center",
+        textfont=dict(size=10), name="activos",
+        marker=dict(size=9, symbol="circle-open", line=dict(width=1.5)),
+        hovertemplate="<b>%{text}</b><br>volatilidad %{x:.2%}"
+                      "<br>retorno %{y:.2%}<extra></extra>"))
+
+    tangente = [p for p in portafolios.index if p.startswith("tangente")]
+    if rf is not None and tangente:
+        t = portafolios.loc[tangente[0]]
+        x_fin = max(float(frontera["volatility"].max()),
+                    float(activos["volatility"].max()))
+        fig.add_trace(go.Scatter(
+            x=[0, x_fin], y=[rf, rf + t["sharpe"] * x_fin], mode="lines",
+            name="linea del mercado de capitales", hoverinfo="skip",
+            line=dict(width=1.5, dash="dash")))
+
+    for nombre, fila in portafolios.iterrows():
+        resaltado = nombre == elegido
+        fig.add_trace(go.Scatter(
+            x=[fila["volatility"]], y=[fila["return"]], mode="markers",
+            name=nombre,
+            marker=dict(size=20 if resaltado else 12,
+                        symbol="star" if resaltado else "diamond",
+                        line=dict(width=1.5)),
+            hovertemplate=f"<b>{nombre}</b><br>volatilidad %{{x:.2%}}"
+                          "<br>retorno %{y:.2%}<extra></extra>"))
+
+    fig.update_layout(
+        template=TEMA, height=560,
+        title="Frontera eficiente sin ventas en corto",
+        xaxis=dict(title="volatilidad anual", tickformat=".1%",
+                   rangemode="tozero"),
+        yaxis=dict(title="rendimiento esperado anual", tickformat=".1%"),
+        legend=dict(orientation="h", y=-0.15))
+    return fig
+
+
+def weights_chart(pesos, nombre):
+    """Barras horizontales con los pesos del portafolio, de mayor a menor.
+
+    pesos --> Serie de pesos indexada por ticker
+    nombre --> nombre del portafolio, para el titulo
+    """
+    w = pesos.sort_values()
+    fig = go.Figure(go.Bar(
+        x=w, y=w.index, orientation="h", text=[f"{x:.1%}" for x in w],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>peso %{x:.2%}<extra></extra>"))
+    fig.update_layout(
+        template=TEMA, height=max(260, 40 * len(w) + 120),
+        title=f"Pesos - {nombre}",
+        xaxis=dict(title="peso", tickformat=".0%",
+                   range=[0, max(1.0, float(w.max()) * 1.15)]),
+        showlegend=False)
+    return fig
