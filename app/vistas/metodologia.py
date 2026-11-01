@@ -55,8 +55,7 @@ def render(ctx):
         "ARIMA(p,1,q) sobre el log-precio, que equivale a un ARMA(p,q) con "
         "constante (la deriva) sobre el log-rendimiento. Se comparan "
         "ARIMA(1,1,1), ARIMA(0,1,1) y ARIMA(1,1,0) y se elige el de menor "
-        "AIC: por maxima verosimilitud ganaria siempre el (1,1,1), que "
-        "contiene a los otros dos. Sobre sus residuos se estima un "
+        "AIC. Sobre sus residuos se estima un "
         "GARCH(1,1) con innovaciones t-Student, que captura las rachas de "
         "volatilidad y las colas gruesas:")
     st.latex(r"g_t = c + \phi\,(g_{t-1} - c) + \varepsilon_t + "
