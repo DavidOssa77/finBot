@@ -3,6 +3,7 @@ numpy==2.4.0
 pandas==2.3.3
 scipy==1.16.3
 statsmodels==0.14.6
+arch==8.0.0
 
 # Datos — fija: auto_adjust cambio de default entre versiones de yfinance
 yfinance==1.0
