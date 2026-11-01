@@ -5,10 +5,11 @@ import math
 import pandas as pd
 import streamlit as st
 
+import src.black_litterman as bl
 import src.data as dt
 import src.portfolio as pf
 from app import charts
-from app.contexto import descargar_fx, descargar_tasa
+from app.contexto import descargar_capitalizacion, descargar_fx, descargar_tasa
 
 # Nombre en la interfaz --> nombre en portfolio.key_portfolios
 PORTAFOLIOS = {
@@ -16,6 +17,9 @@ PORTAFOLIOS = {
     "Minima varianza": "minima varianza",
     "Maxima rentabilidad": "maxima rentabilidad",
 }
+FUENTES_MU = ("Historicos", "Black-Litterman")
+COLUMNAS_VISTAS = ("tipo", "activo", "contra", "rendimiento (%)",
+                   "confianza (%)")
 
 
 def controles(fuente):
@@ -127,6 +131,158 @@ def _tope(contenedor, n):
     return st.session_state["tope_barra"]
 
 
+def _pesos_mercado(activos, ctx):
+    """Pesos de mercado de los activos del portafolio.
+
+    Con Yahoo, el usuario elige entre capitalizacion (convertida a
+    dolares) y pesos iguales. Si falta la capitalizacion o el tipo de
+    cambio de algun activo, se usan pesos iguales para todos: mezclar
+    capitalizaciones con pesos inventados no tiene sentido.
+    Devuelve (Serie de pesos, descripcion del origen, aviso o None).
+    """
+    iguales = pd.Series(1 / len(activos), index=activos)
+    if ctx.fuente != "Yahoo Finance":
+        return (iguales, "pesos iguales (el fixture no tiene capitalizacion)",
+                None)
+
+    eleccion = st.radio("Pesos de mercado", ["Capitalizacion", "Iguales"],
+                        horizontal=True,
+                        help="Capitalizacion bursatil actual de Yahoo, "
+                             "convertida a dolares.")
+    if eleccion == "Iguales":
+        return iguales, "pesos iguales", None
+
+    caps, errores = descargar_capitalizacion(tuple(activos))
+    if errores:
+        return iguales, "pesos iguales", (
+            "Sin capitalizacion para " + ", ".join(errores) + ": se usan "
+            "pesos iguales para todos los activos.")
+
+    monedas = {t: dt.market_info(t)[0] for t in activos}
+    extranjeras = set(monedas.values()) - {"USD"}
+    if extranjeras:
+        fx, err_fx = descargar_fx(tuple(sorted(extranjeras)),
+                                  str(ctx.inicio), str(ctx.fin))
+        if err_fx:
+            return iguales, "pesos iguales", (
+                "Sin tipo de cambio para " + ", ".join(err_fx) + ": no se "
+                "pueden comparar capitalizaciones; se usan pesos iguales.")
+        for t in activos:
+            if monedas[t] != "USD":
+                caps[t] = caps[t] / fx[monedas[t]].dropna().iloc[-1]
+    return bl.market_weights(caps[activos]), "capitalizacion en USD", None
+
+
+def _leer_vistas(tabla, rf):
+    """Convierte las filas del editor en visiones para black_litterman.
+
+    En las absolutas el usuario escribe el rendimiento TOTAL esperado y
+    aqui se le resta rf: el modelo trabaja con excesos. En las relativas
+    escribe la diferencia entre los dos activos, que no cambia.
+    Devuelve (vistas, avisos). Las filas vacias se ignoran sin aviso; las
+    incompletas se ignoran con aviso.
+    """
+    vistas, avisos = [], []
+    for i, fila in tabla.reset_index(drop=True).iterrows():
+        if fila.isna().all():
+            continue
+        tipo, activo, contra = fila["tipo"], fila["activo"], fila["contra"]
+        r, c = fila["rendimiento (%)"], fila["confianza (%)"]
+        incompleta = (pd.isna(tipo) or pd.isna(activo) or pd.isna(r)
+                      or pd.isna(c)
+                      or (tipo == "relativa" and pd.isna(contra)))
+        if incompleta:
+            avisos.append(f"La vision {i + 1} esta incompleta y se ignora.")
+            continue
+        vistas.append({
+            "tipo": tipo, "activo": activo,
+            "contra": contra if tipo == "relativa" else None,
+            "q": r / 100 - rf if tipo == "absoluta" else r / 100,
+            "confianza": c / 100})
+    return vistas, avisos
+
+
+def _black_litterman(mu, Sigma, rf, ctx):
+    """Seccion de Black-Litterman: parametros, visiones y resultado.
+
+    mu, Sigma --> momentos historicos anuales de los activos elegidos
+    Devuelve (mu, Sigma) de Black-Litterman en rendimientos totales,
+    listos para el optimizador, o None si las visiones tienen errores.
+    """
+    st.subheader("Black-Litterman")
+    activos = list(Sigma.index)
+    w_mkt, origen_w, aviso_w = _pesos_mercado(activos, ctx)
+    if aviso_w:
+        st.warning(aviso_w)
+
+    p1, p2 = st.columns(2)
+    tau = p1.number_input(
+        "Tau", 0.005, 1.0, 0.05, 0.005, "%.3f",
+        help="Incertidumbre del equilibrio. Valores tipicos: 0.025 a 0.05. "
+             "No cambia los rendimientos (cuanto pesa cada vision lo fija "
+             "su confianza); solo agranda la covarianza, (1 + tau) Sigma "
+             "sin visiones.")
+    erp = p2.number_input(
+        "Prima de riesgo de mercado", 0.0, 0.15, 0.05, 0.0025, "%.4f",
+        help="E[Rm] - rf anual. Fija la aversion al riesgo del mercado y, "
+             "con ella, los rendimientos de equilibrio.")
+
+    st.markdown(
+        "**Visiones.** Absoluta: rendimiento total anual esperado del "
+        "activo. Relativa: cuanto rinde *activo* por encima de *contra*. "
+        "La confianza dice que fraccion del camino se recorre desde el "
+        "equilibrio hacia la vision.")
+    vacia = pd.DataFrame({c: pd.Series(dtype="object")
+                          for c in COLUMNAS_VISTAS[:3]}
+                         | {c: pd.Series(dtype="float")
+                            for c in COLUMNAS_VISTAS[3:]})
+    tabla = st.data_editor(
+        vacia, num_rows="dynamic", key="vistas_bl", width="stretch",
+        column_config={
+            "tipo": st.column_config.SelectboxColumn(
+                "tipo", options=list(bl.TIPOS), required=True),
+            "activo": st.column_config.SelectboxColumn(
+                "activo", options=activos, required=True),
+            "contra": st.column_config.SelectboxColumn(
+                "contra", options=activos,
+                help="Solo en las visiones relativas"),
+            "rendimiento (%)": st.column_config.NumberColumn(
+                "rendimiento (%)", min_value=-100.0, max_value=200.0,
+                step=0.5, format="%.2f"),
+            "confianza (%)": st.column_config.NumberColumn(
+                "confianza (%)", min_value=1.0, max_value=100.0, step=5.0,
+                format="%.0f"),
+        })
+    vistas, avisos = _leer_vistas(tabla, rf)
+    for a in avisos:
+        st.warning(a)
+
+    try:
+        r = bl.black_litterman(Sigma, w_mkt, erp, vistas, tau)
+    except ValueError as e:
+        st.error(f"Revisa las visiones: {e}")
+        return None
+
+    mu_bl = r["mu_BL"] + rf
+    st.plotly_chart(charts.bl_returns_chart(pd.DataFrame({
+        "historico": mu, "equilibrio": r["Pi"] + rf,
+        "black_litterman": mu_bl})), width="stretch")
+    st.caption(
+        f"Pesos de mercado: {origen_w}. Aversion al riesgo implicita "
+        f"delta = {r['delta']:.2f}. El equilibrio es el CAPM sobre estos "
+        "activos; sin visiones, Black-Litterman coincide con el y el "
+        "portafolio tangente es el de mercado. Todos los rendimientos son "
+        f"totales: excesos mas rf = {rf:.2%}.")
+
+    with st.expander("Ver el detalle"):
+        st.dataframe(pd.DataFrame({
+            "peso de mercado": w_mkt, "historico": mu,
+            "equilibrio": r["Pi"] + rf, "Black-Litterman": mu_bl,
+        }).style.format("{:.2%}"), width="stretch")
+
+    return mu_bl, r["Sigma_BL"]
+
+
 def render(ctx):
     """Dibuja la vista con el contexto comun y los ajustes de controles."""
     st.subheader("Construccion del portafolio")
@@ -138,6 +294,10 @@ def render(ctx):
         st.info("Elige al menos dos activos para construir el portafolio.")
         return
 
+    fuente_mu = st.radio(
+        "Rendimientos esperados", FUENTES_MU, horizontal=True,
+        help="Historicos: media de la muestra. Black-Litterman: equilibrio "
+             "del mercado ajustado por las visiones que ingreses.")
     c1, c2 = st.columns(2)
     tipo = c1.radio("Portafolio", list(PORTAFOLIOS), horizontal=True)
     tope = _tope(c2, len(activos))
@@ -163,6 +323,12 @@ def render(ctx):
                  "cotizan: no alcanza para estimar la covarianza.")
         return
     mu, Sigma = pf.moments(R, m)
+    if fuente_mu == "Black-Litterman":
+        resultado = _black_litterman(mu, Sigma, rf, ctx)
+        if resultado is None:
+            return
+        mu, Sigma = resultado
+        st.subheader("Portafolio con Black-Litterman")
 
     pesos, resumen = pf.key_portfolios(mu, Sigma, rf, w_max)
     nombre = PORTAFOLIOS[tipo]
@@ -185,7 +351,10 @@ def render(ctx):
         rf if nombre == "tangente" else None), width="stretch")
     st.caption(
         f"{len(R)} periodos comunes, frecuencia {freq}, rendimientos simples "
-        "anualizados. La frontera va del portafolio de minima varianza al de "
+        "anualizados"
+        + (", esperados de Black-Litterman." if fuente_mu != "Historicos"
+           else ".")
+        + " La frontera va del portafolio de minima varianza al de "
         "maxima rentabilidad: para cada rendimiento, la menor volatilidad "
         "posible sin ventas en corto"
         + (f" y sin superar {tope} % por activo." if tope < 100 else ".")

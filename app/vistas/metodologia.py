@@ -25,7 +25,9 @@ def render(ctx):
         "Preselecciona activos: no recomienda comprar ni vender. Estima "
         "rendimiento y riesgo bajo un modelo declarado, comprueba si la "
         "operacion es viable una vez pagadas las comisiones, y muestra **que "
-        "regla incumple** cuando no lo es.")
+        "regla incumple** cuando no lo es. Con los activos elegidos "
+        "construye portafolios de Markowitz, con rendimientos historicos o "
+        "de Black-Litterman.")
 
     st.subheader("Convencion de rendimientos")
     st.latex(r"g_t = \ln\left(\frac{P_t}{P_{t-1}}\right)")
@@ -93,6 +95,74 @@ def render(ctx):
         "**sistematica**, `beta^2 var(Rm)`, que el mercado remunera, y una "
         "**idiosincratica**, que se elimina diversificando.")
 
+    st.subheader("Portafolios de Markowitz")
+    st.markdown(
+        "La vista Portafolio combina los activos elegidos con rendimientos "
+        "**simples**, que si son lineales entre activos: el rendimiento del "
+        "portafolio es el promedio ponderado de los rendimientos de sus "
+        "activos. Media y covarianza muestral se anualizan multiplicando por "
+        "los periodos del año:")
+    st.latex(r"\mu = m\,\bar{R} \qquad \Sigma = m\,\widehat{\mathrm{Cov}}(R)"
+             r"\qquad E[R_p] = w'\mu \qquad \sigma_p = \sqrt{w'\Sigma w}")
+    st.markdown(
+        "Todos los portafolios invierten el 100 % en activos riesgosos, "
+        "**sin ventas en corto** y con un tope opcional por activo:")
+    st.latex(r"\sum_i w_i = 1 \qquad 0 \le w_i \le w_{max}")
+    st.markdown(
+        "- **Minima varianza global:** minimiza `w' Sigma w`. Solo depende "
+        "de las covarianzas, no de los rendimientos esperados.\n"
+        "- **Tangente:** maximiza la razon de Sharpe, "
+        "`(w' mu - rf) / sigma_p`. Es el punto donde la recta que sale de "
+        "`rf` toca la frontera. No existe si ningun activo rinde mas que "
+        "`rf`.\n"
+        "- **Maxima rentabilidad:** maximiza `w' mu`. Sin tope es el activo "
+        "de mayor media; con tope, llena los activos en orden de media.\n"
+        "- **Frontera eficiente:** para cada rendimiento entre el de minima "
+        "varianza y el de maxima rentabilidad, la menor volatilidad "
+        "posible.\n\n"
+        "Se resuelven con SLSQP y gradientes analiticos. Los precios se "
+        "alinean a fechas comunes antes de calcular rendimientos, porque la "
+        "covarianza necesita todos los activos en cada fecha. Con Yahoo, "
+        "los activos extranjeros se pasan a dolares y `rf` es el bono del "
+        "Tesoro de plazo mas cercano al horizonte.")
+
+    st.subheader("Black-Litterman")
+    st.markdown(
+        "La media historica es un estimador muy ruidoso del rendimiento "
+        "esperado, y Markowitz la amplifica: pequeños errores en `mu` "
+        "producen portafolios concentrados en pocos activos. "
+        "Black-Litterman parte de un punto de referencia neutral, el "
+        "**equilibrio del mercado**, y lo corrige solo donde el usuario "
+        "tiene una opinion. Trabaja con **excesos** sobre `rf`; al "
+        "optimizador se le pasan rendimientos totales (exceso + `rf`).")
+    st.markdown(
+        "**Equilibrio.** Con los pesos de mercado `w_mkt` (capitalizacion "
+        "de Yahoo en dolares, o pesos iguales) se buscan los rendimientos "
+        "que harian optimo al portafolio de mercado (optimizacion inversa). "
+        "Es el CAPM con beta medida contra ese portafolio:")
+    st.latex(r"\delta = \frac{E[R_m] - r_f}{w_{mkt}'\,\Sigma\,w_{mkt}}"
+             r"\qquad \Pi = \delta\,\Sigma\,w_{mkt}"
+             r" = \beta\,(E[R_m] - r_f)")
+    st.markdown(
+        "**Visiones.** Cada fila de la tabla es una vision: absoluta (el "
+        "activo rinde `q`) o relativa (el activo rinde `q` mas que otro). "
+        "Se escriben como `P mu = Q`, con incertidumbre `Omega` diagonal. "
+        "Omega sale de la confianza `c` (Idzorek simplificado):")
+    st.latex(r"\Omega_k = \frac{1 - c_k}{c_k}\;P_k\,\tau\Sigma\,P_k'")
+    st.markdown(
+        "Con una sola vision, su rendimiento recorre exactamente la "
+        "fraccion `c` del camino entre el equilibrio y `q`; con confianza "
+        "del 100 % se adopta la vision tal cual. **Posterior:**")
+    st.latex(r"\mu_{BL} = \Pi + \tau\Sigma P'\,(P\tau\Sigma P' + \Omega)^{-1}"
+             r"\,(Q - P\,\Pi)")
+    st.latex(r"\Sigma_{BL} = \Sigma + \tau\Sigma - \tau\Sigma P'\,"
+             r"(P\tau\Sigma P' + \Omega)^{-1}\,P\,\tau\Sigma")
+    st.markdown(
+        "Sin visiones, `mu_BL = Pi` y el portafolio tangente es el de "
+        "mercado. Como `Omega` es proporcional a `tau`, tau se cancela en "
+        "`mu_BL`: los rendimientos solo dependen de la confianza, y tau "
+        "solo escala la incertidumbre que se suma a `Sigma`.")
+
     st.subheader("Limitaciones conocidas")
     st.markdown(
         "- **La homocedasticidad no se cumple.** ARCH-LM rechaza en "
@@ -108,8 +178,24 @@ def render(ctx):
         "0 o de 1 en vez de aproximarse al nivel prometido.\n"
         "- **El CAPM se estima con historia.** La beta cambia en el "
         "tiempo y el alfa realizado no predice el alfa futuro; con pocos "
-        "anios de datos casi ningun alfa es estadisticamente distinto de "
+        "años de datos casi ningun alfa es estadisticamente distinto de "
         "cero.\n"
+        "- **El mercado de cada activo sale del sufijo del ticker.** Solo "
+        "se reconocen los sufijos de la tabla de mercados (vista Glosario). "
+        "Un activo con otro sufijo (por ejemplo `.AX` o `.SW`) se trata "
+        "como de EE.UU.: se asume que cotiza en dolares y no se convierte, "
+        "y el CAPM lo mide contra el S&P 500. Su beta, su conversion a "
+        "dolares en Portafolio y su capitalizacion en Black-Litterman "
+        "quedan mal, sin aviso.\n"
+        "- **Markowitz es sensible a los rendimientos esperados.** Con "
+        "medias historicas, cambios pequeños en la muestra mueven mucho los "
+        "pesos del tangente y de la maxima rentabilidad. La frontera es "
+        "eficiente dentro de la muestra, no necesariamente fuera de ella.\n"
+        "- **Los pesos de mercado de Black-Litterman usan la capitalizacion "
+        "de hoy**, no la del periodo analizado, y solo de los activos "
+        "elegidos: es un mercado reducido, no el portafolio de mercado del "
+        "CAPM. La prima de riesgo y la confianza de las visiones las fija "
+        "el usuario.\n"
         "- **El perfil de riesgo no entra en el calculo.** Un activo puede "
         "tener el mejor cociente retorno-volatilidad y aun asi ser inadecuado "
         "para quien lo mire.")

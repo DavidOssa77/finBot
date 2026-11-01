@@ -62,3 +62,9 @@ def descargar_tasa(plazo, inicio, fin):
 def descargar_fx(monedas, inicio, fin):
     """Tipos de cambio contra el dolar."""
     return dt.fetch_fx(list(monedas), inicio, fin)
+
+
+@st.cache_data(ttl=3600)
+def descargar_capitalizacion(tickers):
+    """Capitalizaciones de mercado; se refrescan cada hora."""
+    return dt.fetch_market_caps(list(tickers))

@@ -6,7 +6,7 @@ registrarla aqui.
 """
 
 from . import (datos, resumen, precio, rendimientos, proyeccion, comparacion,
-               capm, portafolio, metodologia)
+               capm, portafolio, metodologia, glosario)
 
 VISTAS = {
     "Datos": datos,
@@ -18,5 +18,6 @@ VISTAS = {
     "CAPM": capm,
     "Portafolio": portafolio,
     "Metodologia": metodologia,
+    "Glosario": glosario,
 }
 INICIAL = "Metodologia"

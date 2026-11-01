@@ -290,3 +290,25 @@ def weights_chart(pesos, nombre):
                    range=[0, max(1.0, float(w.max()) * 1.15)]),
         showlegend=False)
     return fig
+
+
+def bl_returns_chart(tabla):
+    """Rendimientos esperados por activo: historico, equilibrio y BL.
+
+    tabla --> DataFrame por ticker con columnas historico, equilibrio y
+              black_litterman (rendimientos totales anuales)
+    """
+    series = (("historico", "historico"), ("equilibrio", "equilibrio (CAPM)"),
+              ("black_litterman", "Black-Litterman"))
+    fig = go.Figure()
+    for columna, nombre in series:
+        fig.add_trace(go.Bar(
+            x=tabla.index, y=tabla[columna], name=nombre,
+            hovertemplate="<b>%{x}</b><br>" + nombre +
+                          " %{y:.2%}<extra></extra>"))
+    fig.update_layout(
+        template=TEMA, height=440, barmode="group",
+        title="Rendimientos esperados: historia, equilibrio y visiones",
+        yaxis=dict(title="rendimiento esperado anual", tickformat=".1%"),
+        legend=dict(orientation="h", y=-0.15))
+    return fig

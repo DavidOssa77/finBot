@@ -173,6 +173,31 @@ def to_usd(prices, currency, fx):
     return (prices / tc).dropna()
 
 
+def fetch_market_caps(tickers):
+    """Capitalizacion bursatil actual de cada simbolo, en su moneda local.
+
+    tickers --> lista de simbolos
+    Devuelve (capitalizaciones, errores):
+      capitalizaciones --> Serie por ticker con los que respondieron
+      errores --> dict {ticker: motivo} de los que fallaron
+
+    Es la capitalizacion de HOY, no la del periodo analizado. Para
+    acciones preferenciales Yahoo puede reportar la de toda la empresa.
+    """
+    caps, errores = {}, {}
+    for t in tickers:
+        try:
+            cap = yf.Ticker(t).fast_info["marketCap"]
+        except Exception as e:
+            errores[t] = f"fallo la consulta: {e}"
+            continue
+        if cap is None or not cap > 0:
+            errores[t] = "Yahoo no reporta capitalizacion"
+            continue
+        caps[t] = float(cap)
+    return pd.Series(caps, dtype=float), errores
+
+
 def wide_from_long(long_df, value_col="adjusted_close"):
     """Convierte un DataFrame largo a uno ancho (fechas x tickers)
 
