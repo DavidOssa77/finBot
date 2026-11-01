@@ -284,7 +284,8 @@ def optimal_allocation(mu, Sigma, rf, A, w_max=1.0):
         else:
             w = max_utility(mu, Sigma, A, w_max)
 
-    w_rf = 1 - w.sum()
+    # max evita un -1e-16 de redondeo cuando todo va a activos riesgosos
+    w_rf = max(0.0, 1 - w.sum())
     ret = float(w @ mu) + w_rf * rf
     vol = float(np.sqrt(w @ Sigma.to_numpy() @ w))
     return {"y": y, "weights": w, "w_rf": w_rf, "return": ret,
