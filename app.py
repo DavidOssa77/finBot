@@ -23,6 +23,12 @@ def ir_al_perfil():
     st.session_state["vista"] = PERFIL
 
 
+# Streamlit borra el estado de los widgets que no se dibujan; reescribir
+# sus claves en cada ejecucion conserva lo elegido al cambiar de vista.
+for registrada in VISTAS.values():
+    for clave, inicial in getattr(registrada, "PERSISTENTES", {}).items():
+        st.session_state[clave] = st.session_state.get(clave, inicial)
+
 # ---------------------------------------------------------------- sidebar
 st.sidebar.title("Robot analitico")
 st.session_state.setdefault("vista", INICIAL)

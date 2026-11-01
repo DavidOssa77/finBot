@@ -11,15 +11,26 @@ import src.portfolio as pf
 from app import charts
 from app.contexto import descargar_capitalizacion, descargar_fx, descargar_tasa
 
-# Nombre en la interfaz --> nombre en portfolio.key_portfolios
-PORTAFOLIOS = {
-    "Tangente": "tangente",
-    "Minima varianza": "minima varianza",
-    "Maxima rentabilidad": "maxima rentabilidad",
-}
 FUENTES_MU = ("Historicos", "Black-Litterman")
 COLUMNAS_VISTAS = ("tipo", "activo", "contra", "rendimiento (%)",
                    "confianza (%)")
+# Controles que conservan su valor al cambiar de vista: clave --> valor
+# inicial. app.py los vuelve a escribir en cada ejecucion para que
+# Streamlit no los borre cuando esta vista no se dibuja; por eso los
+# widgets no reciben valor inicial propio.
+PERSISTENTES = {
+    "freq_portafolio": "W-FRI",
+    "plazo_portafolio": "Automatico",
+    "usd_portafolio": True,
+    "rf_portafolio": 0.04,
+    "tope_barra": 100,
+    "tope_casilla": 100,
+    "activos_portafolio": [],
+    "fuente_mu": FUENTES_MU[0],
+    "pesos_mercado": "Iguales",
+    "tau_bl": 0.05,
+    "erp_bl": 0.1,
+}
 
 
 def controles(fuente):
@@ -33,7 +44,7 @@ def controles(fuente):
     st.sidebar.caption("Portafolio")
     freq = st.sidebar.selectbox(
         "Frecuencia de los rendimientos", list(dt.PERIODOS_POR_ANIO),
-        index=1, key="freq_portafolio",
+        key="freq_portafolio",
         help="Semanal por defecto: con datos diarios, los horarios distintos "
              "de cada bolsa subestiman la covarianza entre activos de "
              "paises diferentes.")
@@ -44,12 +55,12 @@ def controles(fuente):
             help="Bono del Tesoro de EE.UU. Automatico elige el plazo mas "
                  "cercano al horizonte H.")
         en_usd = st.sidebar.checkbox(
-            "Expresar todo en USD", True, key="usd_portafolio",
+            "Expresar todo en USD", key="usd_portafolio",
             help="Convierte los activos extranjeros a dolares: un portafolio "
                  "solo tiene sentido en una moneda.")
     rf_fixed = st.sidebar.number_input(
         "Tasa libre de riesgo (respaldo)" if fuente == "Yahoo Finance"
-        else "Tasa libre de riesgo", 0.0, 0.20, 0.04, 0.0025, "%.4f",
+        else "Tasa libre de riesgo", 0.0, 0.20, step=0.0025, format="%.4f",
         key="rf_portafolio",
         help="Tasa anual constante. Con Yahoo solo se usa si la descarga "
              "del bono falla.")
@@ -146,7 +157,7 @@ def _pesos_mercado(activos, ctx):
                 None)
 
     eleccion = st.radio("Pesos de mercado", ["Capitalizacion", "Iguales"],
-                        horizontal=True,
+                        horizontal=True, key="pesos_mercado",
                         help="Capitalizacion bursatil actual de Yahoo, "
                              "convertida a dolares.")
     if eleccion == "Iguales":
@@ -217,13 +228,14 @@ def _black_litterman(mu, Sigma, rf, ctx):
 
     p1, p2 = st.columns(2)
     tau = p1.number_input(
-        "Tau", 0.005, 1.0, 0.05, 0.005, "%.3f",
+        "Tau", 0.005, 1.0, step=0.005, format="%.3f", key="tau_bl",
         help="Incertidumbre del equilibrio. Valores tipicos: 0.025 a 0.05. "
              "No cambia los rendimientos (cuanto pesa cada vision lo fija "
              "su confianza); solo agranda la covarianza, (1 + tau) Sigma "
              "sin visiones.")
     erp = p2.number_input(
-        "Prima de riesgo de mercado", 0.0, 0.15, 0.05, 0.0025, "%.4f",
+        "Prima de riesgo de mercado", 0.0, 0.15, step=0.0025,
+        format="%.4f", key="erp_bl",
         help="E[Rm] - rf anual. Fija la aversion al riesgo del mercado y, "
              "con ella, los rendimientos de equilibrio.")
 
@@ -232,12 +244,20 @@ def _black_litterman(mu, Sigma, rf, ctx):
         "activo. Relativa: cuanto rinde *activo* por encima de *contra*. "
         "La confianza dice que fraccion del camino se recorre desde el "
         "equilibrio hacia la vision.")
-    vacia = pd.DataFrame({c: pd.Series(dtype="object")
+    # El estado del editor no se puede reescribir como el de los demas
+    # controles. Se guarda la tabla resultante en "vistas_guardadas" y,
+    # cuando Streamlit borro el editor (se volvio a la vista), se usa como
+    # tabla de partida; mientras se edita, la partida no cambia.
+    if "vistas_bl" not in st.session_state:
+        st.session_state["vistas_base"] = st.session_state.get(
+            "vistas_guardadas",
+            pd.DataFrame({c: pd.Series(dtype="object")
                           for c in COLUMNAS_VISTAS[:3]}
                          | {c: pd.Series(dtype="float")
-                            for c in COLUMNAS_VISTAS[3:]})
+                            for c in COLUMNAS_VISTAS[3:]}))
     tabla = st.data_editor(
-        vacia, num_rows="dynamic", key="vistas_bl", width="stretch",
+        st.session_state["vistas_base"], num_rows="dynamic",
+        key="vistas_bl", width="stretch", hide_index=True,
         column_config={
             "tipo": st.column_config.SelectboxColumn(
                 "tipo", options=list(bl.TIPOS), required=True),
@@ -253,6 +273,7 @@ def _black_litterman(mu, Sigma, rf, ctx):
                 "confianza (%)", min_value=1.0, max_value=100.0, step=5.0,
                 format="%.0f"),
         })
+    st.session_state["vistas_guardadas"] = tabla.reset_index(drop=True)
     vistas, avisos = _leer_vistas(tabla, rf)
     for a in avisos:
         st.warning(a)
@@ -283,70 +304,56 @@ def _black_litterman(mu, Sigma, rf, ctx):
     return mu_bl, r["Sigma_BL"]
 
 
-def _perfil_riesgo(mu, Sigma, rf, w_max, frontera, individuales, resumen):
-    """Seccion del perfil de riesgo: asignacion optima con el A guardado.
+def _asignacion(mu, Sigma, rf, w_max, resumen):
+    """Portafolio del inversionista con el A guardado: titulo y metricas.
 
     mu, Sigma --> momentos anuales con los que se construyo el portafolio
-    frontera, individuales, resumen --> lo que ya se calculo para la
-    frontera, para no repetirlo
-    El perfil (A y nombre) lo guarda la vista Perfil de riesgo; app.py
-    no deja llegar aqui sin el.
+    resumen --> portafolios de referencia de key_portfolios
+    Devuelve el diccionario de portfolio.optimal_allocation. El perfil lo
+    guarda la vista Perfil de riesgo; app.py no deja llegar aqui sin el.
     """
-    st.subheader("Asignacion segun tu perfil de riesgo")
     perfil = st.session_state["perfil"]
     A = perfil["A"]
-    st.markdown(
-        "Tu aversion al riesgo decide cuanto del capital va al portafolio "
-        "tangente y cuanto a renta fija (separacion de Tobin), sin "
-        "endeudarse. Para cambiarla, vuelve a la vista Perfil de riesgo.")
-
+    st.subheader(f"Tu portafolio (perfil {perfil['nombre']}, A = {A:.1f})")
     r = pf.optimal_allocation(mu, Sigma, rf, A, w_max)
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Perfil", perfil["nombre"])
-    k2.metric("Aversion al riesgo A", f"{A:.1f}")
+    k1.metric("Rendimiento esperado", f"{r['return']:.2%}")
+    k2.metric("Volatilidad", f"{r['volatility']:.2%}")
     k3.metric("y*", f"{r['y']:.2f}")
     k4.metric("Renta fija", f"{r['w_rf']:.1%}")
-    k5, k6 = st.columns(2)
-    k5.metric("Rendimiento esperado", f"{r['return']:.2%}")
-    k6.metric("Volatilidad", f"{r['volatility']:.2%}")
 
     if "tangente" not in resumen.index:
-        st.info("Ningun activo rinde mas que la tasa libre de riesgo: todo "
-                "el capital va a renta fija.")
-        puntos = pd.DataFrame(columns=resumen.columns)
-    else:
-        t = resumen.loc["tangente"]
-        A_corte = (t["return"] - rf) / t["volatility"] ** 2
-        if r["y"] > 1:
-            st.info(
-                f"y* = {r['y']:.2f} > 1: este inversionista querria "
-                "endeudarse para invertir mas que su capital en el tangente. "
-                "Sin apalancamiento, invierte el 100 % en activos riesgosos "
-                "y se mueve por la frontera hacia la maxima rentabilidad.")
-        st.caption(
-            f"y* = (E[Rt] - rf) / (A sigma_t^2) con rf = {rf:.2%}. Con estos "
-            f"activos, y* = 1 cuando A = {A_corte:.1f}: con una A menor el "
-            "inversionista querria apalancarse.")
-        puntos = resumen.loc[["tangente"]].copy()
-    puntos.loc["inversionista"] = {
-        "return": r["return"], "volatility": r["volatility"],
-        "sharpe": float("nan")}
-    st.plotly_chart(charts.frontier_chart(
-        frontera, individuales, puntos, "inversionista", rf),
-        width="stretch")
-
-    pesos = pd.concat([r["weights"],
-                       pd.Series({"renta fija": r["w_rf"]})])
-    st.plotly_chart(charts.weights_chart(pesos[pesos > 1e-9],
-                                         "perfil del inversionista"),
-                    width="stretch")
+        st.info("Ningun activo rinde mas que la tasa libre de riesgo: no "
+                "existe portafolio tangente y todo el capital va a renta "
+                "fija.")
+        return r
+    t = resumen.loc["tangente"]
+    A_corte = (t["return"] - rf) / t["volatility"] ** 2
+    if r["y"] > 1:
+        st.info(
+            f"y* = {r['y']:.2f} > 1: este inversionista querria endeudarse "
+            "para invertir mas que su capital en el tangente. Sin "
+            "apalancamiento, invierte el 100 % en activos riesgosos y se "
+            "mueve por la frontera hacia la maxima rentabilidad.")
+    st.caption(
+        "Separacion de Tobin: tu aversion al riesgo decide cuanto va al "
+        "portafolio tangente y cuanto a renta fija, sin endeudarse. "
+        f"y* = (E[Rt] - rf) / (A sigma_t^2) con rf = {rf:.2%}; con estos "
+        f"activos, y* = 1 cuando A = {A_corte:.1f}. Para cambiar A, vuelve "
+        "a la vista Perfil de riesgo.")
+    return r
 
 
 def render(ctx):
     """Dibuja la vista con el contexto comun y los ajustes de controles."""
     st.subheader("Construccion del portafolio")
+    # Si cambiaron los tickers del panel, la eleccion guardada puede traer
+    # activos que ya no estan cargados: se quitan antes de dibujar.
+    cargados = list(ctx.precios_diarios.columns)
+    st.session_state["activos_portafolio"] = [
+        t for t in st.session_state["activos_portafolio"] if t in cargados]
     activos = st.multiselect(
-        "Activos del portafolio", list(ctx.precios_diarios.columns),
+        "Activos del portafolio", cargados, key="activos_portafolio",
         help="Solo se puede elegir entre los activos cargados. Para usar "
              "otros, agregalos en el panel lateral.")
     if len(activos) < 2:
@@ -355,11 +362,10 @@ def render(ctx):
 
     fuente_mu = st.radio(
         "Rendimientos esperados", FUENTES_MU, horizontal=True,
+        key="fuente_mu",
         help="Historicos: media de la muestra. Black-Litterman: equilibrio "
              "del mercado ajustado por las visiones que ingreses.")
-    c1, c2 = st.columns(2)
-    tipo = c1.radio("Portafolio", list(PORTAFOLIOS), horizontal=True)
-    tope = _tope(c2, len(activos))
+    tope = _tope(st.container(), len(activos))
     w_max = tope / 100
 
     precios, avisos = ctx.precios_diarios[activos], []
@@ -387,27 +393,23 @@ def render(ctx):
         if resultado is None:
             return
         mu, Sigma = resultado
-        st.subheader("Portafolio con Black-Litterman")
 
     pesos, resumen = pf.key_portfolios(mu, Sigma, rf, w_max)
-    nombre = PORTAFOLIOS[tipo]
-    if nombre not in pesos:
-        st.error("Ningun activo rinde mas que la tasa libre de riesgo: no "
-                 "existe portafolio tangente. Elige otro portafolio.")
-        return
-    elegido = resumen.loc[nombre]
+    r = _asignacion(mu, Sigma, rf, w_max, resumen)
 
-    k1, k2 = st.columns(2)
-    k1.metric("Rendimiento esperado", f"{elegido['return']:.2%}")
-    k2.metric("Volatilidad", f"{elegido['volatility']:.2%}")
-
+    # Un solo grafico: frontera, activos, los tres portafolios de
+    # referencia, la linea del mercado de capitales y el inversionista.
     frontera = pf.efficient_frontier(mu, Sigma, w_max=w_max)
     individuales = pd.DataFrame({"return": mu,
                                  "volatility": Sigma.to_numpy().diagonal()
                                  ** 0.5}, index=mu.index)
+    puntos = resumen.copy()
+    puntos.loc["inversionista"] = {
+        "return": r["return"], "volatility": r["volatility"],
+        "sharpe": float("nan")}
     st.plotly_chart(charts.frontier_chart(
-        frontera, individuales, resumen.loc[[nombre]], nombre,
-        rf if nombre == "tangente" else None), width="stretch")
+        frontera, individuales, puntos, "inversionista", rf),
+        width="stretch")
     st.caption(
         f"{len(R)} periodos comunes, frecuencia {freq}, rendimientos simples "
         "anualizados"
@@ -417,16 +419,14 @@ def render(ctx):
         "maxima rentabilidad: para cada rendimiento, la menor volatilidad "
         "posible sin ventas en corto"
         + (f" y sin superar {tope} % por activo." if tope < 100 else ".")
-        + (f" El tangente se calcula con una tasa libre de riesgo de "
-           f"{rf:.2%} ({origen_rf})." if nombre == "tangente" else ""))
+        + f" Tasa libre de riesgo: {rf:.2%} ({origen_rf}).")
 
-    w = pesos[nombre]
-    st.plotly_chart(charts.weights_chart(w[w > 0], tipo), width="stretch")
+    final = pd.concat([r["weights"], pd.Series({"renta fija": r["w_rf"]})])
+    st.plotly_chart(charts.weights_chart(final[final > 1e-9],
+                                         "tu portafolio"), width="stretch")
 
-    with st.expander("Comparar los tres portafolios"):
+    with st.expander("Comparar los portafolios de referencia"):
         st.dataframe(resumen[["return", "volatility"]].rename(columns={
             "return": "rendimiento", "volatility": "volatilidad"})
             .style.format("{:.2%}"), width="stretch")
         st.dataframe(pesos.style.format("{:.2%}"), width="stretch")
-
-    _perfil_riesgo(mu, Sigma, rf, w_max, frontera, individuales, resumen)
