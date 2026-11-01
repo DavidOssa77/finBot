@@ -11,17 +11,33 @@ import streamlit as st
 import src.contracts as ct
 import src.data as dt
 from app.contexto import Contexto, cargar_fixture, descargar
-from app.vistas import VISTAS, INICIAL
+from app.vistas import VISTAS, INICIAL, PERFIL, SIN_PERFIL
 
 FIXTURE = "notebooks/Fixture_20_activos_sintetico_TBS_EIA.csv"
 
 st.set_page_config(page_title="Robot analitico", layout="wide")
 
+
+def ir_al_perfil():
+    """Cambia el menu a la vista del perfil; corre antes de redibujar."""
+    st.session_state["vista"] = PERFIL
+
+
 # ---------------------------------------------------------------- sidebar
 st.sidebar.title("Robot analitico")
-nombres = list(VISTAS)
-vista = st.sidebar.radio("Vista", nombres, index=nombres.index(INICIAL))
+st.session_state.setdefault("vista", INICIAL)
+vista = st.sidebar.radio("Vista", list(VISTAS), key="vista")
 modulo = VISTAS[vista]
+
+# Punto de entrada: sin perfil de riesgo guardado solo se abren las vistas
+# informativas y la del cuestionario.
+if vista not in SIN_PERFIL and "perfil" not in st.session_state:
+    st.title("Robot analitico para preseleccion de activos")
+    st.warning("Antes de usar el robot, responde el cuestionario de perfil "
+               "de riesgo: con el se decide cuanto de tu capital va a "
+               "activos riesgosos y cuanto a renta fija.")
+    st.button("Ir a Perfil de riesgo", type="primary", on_click=ir_al_perfil)
+    st.stop()
 
 inicio = fin = None
 

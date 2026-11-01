@@ -225,3 +225,67 @@ def efficient_frontier(mu, Sigma, n_points=40, w_max=1.0):
         puntos.append(stats(w, mu, Sigma))
     puntos.append(superior)
     return pd.DataFrame(puntos)[["return", "volatility"]]
+
+
+def max_utility(mu, Sigma, A, w_max=1.0):
+    """Portafolio 100 % riesgoso de maxima utilidad media-varianza.
+
+    mu, Sigma --> momentos anuales
+    A --> aversion al riesgo del inversionista
+    w_max --> peso maximo por activo
+    Devuelve una Serie de pesos indexada por ticker.
+
+    Maximiza U = w' mu - A/2 w' Sigma w sin activo libre de riesgo. Es
+    un punto de la frontera eficiente: con A grande se acerca a la
+    minima varianza y con A pequeño a la maxima rentabilidad.
+    """
+    m, S = mu.to_numpy(), Sigma.to_numpy()
+
+    def menos_utilidad(w):
+        return -(w @ m - A / 2 * w @ S @ w)
+
+    def gradiente(w):
+        return -(m - A * S @ w)
+
+    w = _solve(menos_utilidad, gradiente, len(m), w_max)
+    return pd.Series(w, index=mu.index)
+
+
+def optimal_allocation(mu, Sigma, rf, A, w_max=1.0):
+    """Asignacion del inversionista entre activos y renta fija.
+
+    mu, Sigma --> momentos anuales
+    rf --> tasa libre de riesgo anual (la renta fija)
+    A --> aversion al riesgo del inversionista
+    w_max --> peso maximo por activo riesgoso
+    Devuelve un diccionario con
+      y --> y* = (E[Rt] - rf) / (A sigma_t^2), sin recortar
+      weights --> Serie de pesos en los activos riesgosos
+      w_rf --> peso en renta fija
+      return, volatility, utility --> del portafolio completo
+
+    Separacion de Tobin sin apalancamiento: si y* <= 1 se invierte y* en
+    el tangente y el resto en renta fija (un punto de la linea del
+    mercado de capitales). Si y* > 1 haria falta endeudarse, asi que se
+    elige el portafolio 100 % riesgoso de maxima utilidad, que esta en
+    la frontera entre el tangente y la maxima rentabilidad. Con y* = 1
+    los dos casos coinciden en el tangente. Si ningun activo supera rf,
+    todo va a renta fija.
+    """
+    if (mu <= rf).all():
+        y = 0.0
+        w = pd.Series(0.0, index=mu.index)
+    else:
+        tangente = max_sharpe(mu, Sigma, rf, w_max)
+        t = stats(tangente, mu, Sigma, rf)
+        y = (t["return"] - rf) / (A * t["volatility"] ** 2)
+        if y <= 1:
+            w = y * tangente
+        else:
+            w = max_utility(mu, Sigma, A, w_max)
+
+    w_rf = 1 - w.sum()
+    ret = float(w @ mu) + w_rf * rf
+    vol = float(np.sqrt(w @ Sigma.to_numpy() @ w))
+    return {"y": y, "weights": w, "w_rf": w_rf, "return": ret,
+            "volatility": vol, "utility": ret - A / 2 * vol ** 2}

@@ -6,9 +6,11 @@ registrarla aqui.
 """
 
 from . import (datos, resumen, precio, rendimientos, proyeccion, comparacion,
-               capm, portafolio, metodologia, glosario)
+               capm, portafolio, metodologia, glosario, perfil)
 
 VISTAS = {
+    "Metodologia": metodologia,
+    "Perfil de riesgo": perfil,
     "Datos": datos,
     "Resumen": resumen,
     "Precio": precio,
@@ -17,7 +19,9 @@ VISTAS = {
     "Comparacion": comparacion,
     "CAPM": capm,
     "Portafolio": portafolio,
-    "Metodologia": metodologia,
     "Glosario": glosario,
 }
 INICIAL = "Metodologia"
+PERFIL = "Perfil de riesgo"
+# Vistas que se pueden abrir antes de guardar el perfil de riesgo
+SIN_PERFIL = (INICIAL, PERFIL, "Glosario")

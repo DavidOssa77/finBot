@@ -283,6 +283,65 @@ def _black_litterman(mu, Sigma, rf, ctx):
     return mu_bl, r["Sigma_BL"]
 
 
+def _perfil_riesgo(mu, Sigma, rf, w_max, frontera, individuales, resumen):
+    """Seccion del perfil de riesgo: asignacion optima con el A guardado.
+
+    mu, Sigma --> momentos anuales con los que se construyo el portafolio
+    frontera, individuales, resumen --> lo que ya se calculo para la
+    frontera, para no repetirlo
+    El perfil (A y nombre) lo guarda la vista Perfil de riesgo; app.py
+    no deja llegar aqui sin el.
+    """
+    st.subheader("Asignacion segun tu perfil de riesgo")
+    perfil = st.session_state["perfil"]
+    A = perfil["A"]
+    st.markdown(
+        "Tu aversion al riesgo decide cuanto del capital va al portafolio "
+        "tangente y cuanto a renta fija (separacion de Tobin), sin "
+        "endeudarse. Para cambiarla, vuelve a la vista Perfil de riesgo.")
+
+    r = pf.optimal_allocation(mu, Sigma, rf, A, w_max)
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Perfil", perfil["nombre"])
+    k2.metric("Aversion al riesgo A", f"{A:.1f}")
+    k3.metric("y*", f"{r['y']:.2f}")
+    k4.metric("Renta fija", f"{r['w_rf']:.1%}")
+    k5, k6 = st.columns(2)
+    k5.metric("Rendimiento esperado", f"{r['return']:.2%}")
+    k6.metric("Volatilidad", f"{r['volatility']:.2%}")
+
+    if "tangente" not in resumen.index:
+        st.info("Ningun activo rinde mas que la tasa libre de riesgo: todo "
+                "el capital va a renta fija.")
+        puntos = pd.DataFrame(columns=resumen.columns)
+    else:
+        t = resumen.loc["tangente"]
+        A_corte = (t["return"] - rf) / t["volatility"] ** 2
+        if r["y"] > 1:
+            st.info(
+                f"y* = {r['y']:.2f} > 1: este inversionista querria "
+                "endeudarse para invertir mas que su capital en el tangente. "
+                "Sin apalancamiento, invierte el 100 % en activos riesgosos "
+                "y se mueve por la frontera hacia la maxima rentabilidad.")
+        st.caption(
+            f"y* = (E[Rt] - rf) / (A sigma_t^2) con rf = {rf:.2%}. Con estos "
+            f"activos, y* = 1 cuando A = {A_corte:.1f}: con una A menor el "
+            "inversionista querria apalancarse.")
+        puntos = resumen.loc[["tangente"]].copy()
+    puntos.loc["inversionista"] = {
+        "return": r["return"], "volatility": r["volatility"],
+        "sharpe": float("nan")}
+    st.plotly_chart(charts.frontier_chart(
+        frontera, individuales, puntos, "inversionista", rf),
+        width="stretch")
+
+    pesos = pd.concat([r["weights"],
+                       pd.Series({"renta fija": r["w_rf"]})])
+    st.plotly_chart(charts.weights_chart(pesos[pesos > 1e-9],
+                                         "perfil del inversionista"),
+                    width="stretch")
+
+
 def render(ctx):
     """Dibuja la vista con el contexto comun y los ajustes de controles."""
     st.subheader("Construccion del portafolio")
@@ -369,3 +428,5 @@ def render(ctx):
             "return": "rendimiento", "volatility": "volatilidad"})
             .style.format("{:.2%}"), width="stretch")
         st.dataframe(pesos.style.format("{:.2%}"), width="stretch")
+
+    _perfil_riesgo(mu, Sigma, rf, w_max, frontera, individuales, resumen)
