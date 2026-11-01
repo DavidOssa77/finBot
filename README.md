@@ -10,22 +10,34 @@
 > ejecuta operaciones ni garantiza resultados.
 
 Herramienta que estima rendimiento y riesgo de un conjunto de activos, comprueba
-si una operación es viable una vez pagadas las comisiones y reporta **qué regla incumple** cuando no lo es.
+si una operación es viable una vez pagadas las comisiones y reporta **qué regla
+incumple** cuando no lo es. Con los activos elegidos construye portafolios de
+Markowitz, con rendimientos históricos o de Black-Litterman, y reparte el capital
+entre ellos y renta fija según el perfil de riesgo del inversionista.
 
 ---
 
 ## Qué hace
+
+### Análisis por activo
 
 Sobre una serie de precios ajustados, para cada activo:
 
 1. Calcula log-rendimientos y estadística descriptiva anualizada
 2. Contrasta cuatro supuestos del modelo (normalidad, independencia, varianza
    constante y volatilidad condicional)
-3. Ajusta una caminata aleatoria **con** o **sin** deriva y proyecta precios a
-   un horizonte `H` mediante fórmula cerrada, sin simulación
+3. Ajusta uno de tres modelos y proyecta precios a un horizonte `H` con fórmula
+   cerrada, sin simulación:
+   - **A** — caminata aleatoria sin deriva
+   - **B** — caminata aleatoria con deriva
+   - **C** — ARIMA-GARCH: compara ARIMA(1,1,1), ARIMA(0,1,1) y ARIMA(1,1,0)
+     sobre el log-precio, elige el de menor AIC y modela sus residuos con un
+     GARCH(1,1) t-Student. La varianza acumulada a `H` se calcula exacta con la
+     volatilidad condicional del GARCH y los pesos ψ del ARMA
 4. Deriva stop-loss, take-profit, precio de equilibrio con costos y VaR
    paramétrico
-5. Valida el modelo contra lo que realmente ocurrió (walk-forward)
+5. Valida el modelo contra lo que realmente ocurrió (walk-forward); el modelo C
+   se reestima completo en cada origen
 6. Decide si hay señal y, si no la hay, dice cuál de las siete reglas falló
 
 Y sobre el conjunto: descarta los activos dominados en el plano
@@ -47,6 +59,22 @@ Para cada activo estima el modelo de mercado en excesos,
   riesgo sistemático vs. idiosincrático, rendimiento requerido, Sharpe,
   Treynor y la Línea del Mercado de Valores.
 
+### Portafolios
+
+- **Markowitz sin ventas en corto**, sobre rendimientos simples: mínima
+  varianza global, tangente (máximo Sharpe), máxima rentabilidad y frontera
+  eficiente, con un tope opcional de peso por activo. Se resuelven con SLSQP y
+  gradientes analíticos.
+- **Black-Litterman**: rendimientos de equilibrio `Π = δ Σ w_mkt` con pesos de
+  mercado por capitalización de Yahoo (en USD) o iguales, visiones absolutas y
+  relativas con confianza tipo Idzorek, y prima de riesgo y `τ` ajustables. Sin
+  visiones, el portafolio tangente es el de mercado.
+- **Perfil de riesgo**: un cuestionario de cinco preguntas, obligatorio antes de
+  usar el resto del bot, estima la aversión al riesgo `A` (de 10 a 0.1). Con la
+  separación de Tobin, `y* = (E[R_t] - rf) / (A σ_t²)` decide qué parte del
+  capital va al tangente y qué parte a renta fija; si `y* > 1`, sin
+  apalancamiento, se elige el portafolio de máxima utilidad sobre la frontera.
+
 ---
 
 ## Estructura
@@ -54,22 +82,29 @@ Para cada activo estima el modelo de mercado en excesos,
 ```
 src/                  motor financiero — no conoce la interfaz
   contracts.py        parámetros del análisis
-  data.py             carga, validación, remuestreo, cobertura, alineación
+  data.py             carga, validación, remuestreo, cobertura, alineación;
+                      descargas de Yahoo: precios, índices, tasas, tipos de
+                      cambio y capitalización
   analytics.py        descriptivos y diagnósticos
-  forecasting.py      modelos A y B, trayectoria, walk-forward
+  forecasting.py      modelos A, B y C (ARIMA-GARCH), trayectoria, walk-forward
   risk_rules.py       VaR, niveles con costos, probabilidades, puerta de señal
   compare.py          coordenadas históricas y dominancia
   capm.py             beta, alfa de Jensen, rendimiento requerido, desempeño
+  portfolio.py        Markowitz sin cortos, frontera eficiente y asignación
+                      según el perfil de riesgo
+  black_litterman.py  equilibrio, visiones P/Q/Ω y posterior
   pipeline.py         orquestador: encadena el motor sobre un activo
-app.py                punto de entrada: panel lateral común, carga de datos
+app.py                punto de entrada: panel lateral común, carga de datos y
+                      bloqueo hasta guardar el perfil de riesgo
 app/                  interfaz — solo dibuja, no calcula
   contexto.py         estado común de las vistas y descargas cacheadas
   charts.py           figuras de Plotly
   vistas/             una ventana por archivo
     __init__.py       registro y orden del menú
-    comun.py          selector de activo compartido
-    datos.py, resumen.py, precio.py, rendimientos.py,
-    proyeccion.py, comparacion.py, capm.py, metodologia.py
+    comun.py          selector de activo y análisis cacheado
+    metodologia.py, perfil.py, datos.py, resumen.py, precio.py,
+    rendimientos.py, proyeccion.py, comparacion.py, capm.py,
+    portafolio.py, glosario.py
 notebooks/            cuadernos de verificación
 ```
 
@@ -120,9 +155,19 @@ Para abrir la app ejecutar lo siguiente en consola:
 .venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-- Ocho vistas: datos, resumen, precio, rendimientos, proyección, comparación,
-CAPM y metodología. 
-- Los parámetros: fuente, frecuencia, horizonte, modelo, comisiones,razón beneficio-riesgo mínima, confianza y capital, se ajustan desde el panel lateral y recalculan todo al instante.
+- **Once vistas**: metodología, perfil de riesgo, datos, resumen, precio,
+  rendimientos, proyección, comparación, CAPM, portafolio y glosario.
+- **El perfil de riesgo es el punto de entrada**: hasta guardarlo solo se
+  pueden abrir Metodología, Perfil de riesgo y Glosario. Dura mientras la
+  pestaña del navegador siga abierta.
+- Los parámetros —fuente, frecuencia, horizonte, modelo, comisiones, razón
+  beneficio-riesgo mínima, confianza y capital— se ajustan desde el panel
+  lateral y recalculan todo al instante. Lo elegido en Portafolio se conserva
+  al cambiar de vista.
+- El modelo C tarda unos segundos la primera vez por activo (reestima el
+  ARIMA-GARCH en cada origen del walk-forward); después sale de la caché.
+- El **Glosario** lista los tickers verificados en Yahoo y los sufijos de
+  mercado reconocidos.
 
 ### Los cuadernos
 
@@ -143,12 +188,15 @@ CAPM y metodología.
 **Fixture del curso** (`notebooks/Fixture_20_activos_sintetico_TBS_EIA.csv`) —
 veinte activos sintéticos y deterministas. Usa nombres de tickers reales como
 etiquetas, pero **los precios no son datos de mercado**: AAPL cotiza a 73.63 en
-el fixture y a 248.62 en la realidad. Su virtud es ser reproducible al decimal,
-lo que permite verificar el motor contra resultados esperados.
+el fixture y a 344.63 en la realidad (octubre de 2026). Su virtud es ser
+reproducible al decimal, lo que permite verificar el motor contra resultados
+esperados. Para el modelo C conviene usar Yahoo: los rendimientos sintéticos
+tienen una autocorrelación muy alta y el GARCH queda en la frontera.
 
 **Yahoo Finance** — precios ajustados por dividendos y splits (`auto_adjust=True`).
 Los tickers que fallan se aíslan: los válidos conservan su análisis y la
-aplicación informa cuáles no respondieron.
+aplicación informa cuáles no respondieron. Los fallos no se guardan en caché,
+así que un error pasajero se reintenta en la siguiente interacción.
 
 ---
 
@@ -156,9 +204,23 @@ aplicación informa cuáles no respondieron.
 
 El motor se contrasta contra los resultados esperados publicados por el curso.
 Las quince columnas de los veinte activos coinciden con un error máximo de
-`7.77e-16`, muy por debajo de la tolerancia exigida (`atol=1e-8`).
+`7.77e-16`, muy por debajo de la tolerancia exigida (`atol=1e-8`). La sección
+final de `exploracion.ipynb` ejecuta esa comparación.
 
-La sección final de `exploracion.ipynb` ejecuta esa comparación.
+Las ampliaciones se verifican contra propiedades teóricas con el fixture:
+
+- **Markowitz**: el portafolio de mínima varianza cumple las condiciones KKT.
+- **Black-Litterman**: sin visiones, el tangente es el portafolio de mercado y
+  `Π = β · prima`; con una visión, el rendimiento recorre exactamente la
+  fracción de confianza; la forma usada coincide con la fórmula maestra.
+- **Perfil de riesgo**: con `y* ≤ 1` el portafolio cae sobre la línea del
+  mercado de capitales; con `y* = 1` los dos casos coinciden en el tangente.
+- **Modelo C**: la media y la varianza acumuladas coinciden con una simulación
+  Monte Carlo del ARMA-GARCH ajustado (error menor al 1 %), y A y B dan
+  exactamente los mismos resultados que antes de agregarlo.
+
+La interfaz se recorre con `streamlit.testing.v1.AppTest`, comprobando que las
+vistas que no se tocan muestran exactamente lo mismo que antes.
 
 ---
 
@@ -167,18 +229,28 @@ La sección final de `exploracion.ipynb` ejecuta esa comparación.
 Medidas sobre los datos del proyecto y declaradas en la vista *Metodología* de la app:
 
 - **La homocedasticidad no se cumple.** ARCH-LM rechaza en los veinte activos:
-  la volatilidad viene por rachas. El modelo usa una volatilidad única, así que
-  los intervalos son correctos en promedio pero mal calibrados en cada momento.
+  la volatilidad viene por rachas. Los modelos A y B usan una volatilidad única,
+  así que sus intervalos son correctos en promedio pero mal calibrados en cada
+  momento; el modelo C lo corrige con un GARCH.
+- **El modelo C aproxima la distribución acumulada** con una normal de media y
+  varianza exactas: a horizontes cortos el VaR puede quedarse corto frente a las
+  colas t-Student.
 - **El VaR paramétrico supone normalidad** y subestima la pérdida extrema:
   2.84 % frente a 5.25 % del cuantil histórico sobre el mismo activo.
 - **El walk-forward usa diez orígenes solapados**, que comparten casi todas sus
   observaciones; la cobertura tiende a salir cerca de 0 o de 1.
-- **La dominancia no es una frontera eficiente de Markowitz.** Compara activos
-  individuales: no hay pesos ni matriz de covarianzas.
 - **El CAPM se estima con historia.** La β cambia en el tiempo y el α
   realizado no predice el futuro. Ningún índice es el portafolio de mercado
   teórico (crítica de Roll).
-- **El perfil de riesgo del usuario no entra en ningún cálculo.**
+- **El mercado de cada activo sale del sufijo del ticker.** Un sufijo que no
+  está en la tabla de mercados se trata como de EE. UU., en dólares y contra el
+  S&P 500.
+- **Markowitz es sensible a los rendimientos esperados**: con medias históricas,
+  cambios pequeños en la muestra mueven mucho los pesos.
+- **Black-Litterman usa la capitalización de hoy** y solo de los activos
+  elegidos, no la del periodo analizado.
+- **El paso del cuestionario a `A` es una convención**: el rango de 0.1 a 10 y
+  la escala lineal son supuestos razonables, no una medición.
 
 ---
 
