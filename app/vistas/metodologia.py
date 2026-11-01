@@ -67,15 +67,30 @@ def render(ctx):
         "La media acumulada suma los rendimientos que pronostica el ARIMA. "
         "En la varianza, cada choque futuro tiene la varianza que "
         "pronostica el GARCH y se propaga a los rendimientos siguientes con "
-        "los pesos `psi` del ARMA:")
+        r"los pesos $\psi$ del ARMA:")
     st.latex(r"v_h = \sum_{j=1}^{h} \sigma_{t+j}^2\, \Psi_{h-j}^2 \qquad "
              r"\Psi_n = \sum_{k=0}^{n} \psi_k")
     st.markdown(
-        "Con `alfa + beta < 1` la volatilidad condicional vuelve a la "
-        "incondicional `raiz(omega / (1 - alfa - beta))`. Los niveles, el "
-        "VaR y la señal se calculan igual que en A y B a partir de `m` y "
-        "`v`. En el walk-forward el modelo completo, eleccion de orden "
-        "incluida, se reestima en cada origen.")
+        "**Volatilidad condicional e incondicional.** La varianza que el "
+        "GARCH pronostica para cada periodo futuro depende de la de hoy. "
+        "Como el choque al cuadrado tiene, en promedio, la varianza "
+        "condicional, al tomar el valor esperado de la ecuacion del GARCH "
+        "queda una recursion:")
+    st.latex(r"E_t[\sigma_{t+j}^2] = \omega + (\alpha + \beta)\,"
+             r"E_t[\sigma_{t+j-1}^2] \qquad j \ge 2")
+    st.markdown(
+        r"La suma $\alpha + \beta$ es la **persistencia**. Si es menor "
+        "que 1, "
+        "la recursion converge a un nivel fijo: la varianza "
+        "**incondicional**, la de largo plazo, que no depende de lo que "
+        "paso ayer:")
+    st.latex(r"\alpha + \beta < 1 \;\Rightarrow\; \bar\sigma^2 = "
+             r"\frac{\omega}{1 - \alpha - \beta} \qquad \bar\sigma = "
+             r"\sqrt{\frac{\omega}{1 - \alpha - \beta}}")
+    st.markdown(
+        "Los niveles, el VaR y la señal se calculan igual que en A y B a "
+        "partir de `m` y `v`. En el walk-forward el modelo completo, "
+        "eleccion de orden incluida, se reestima en cada origen.")
 
     st.subheader("Niveles, costos y señal")
     st.markdown(
