@@ -9,7 +9,7 @@ def summary(prices, m):
     """Una fila por activo con sus coordenadas historicas.
 
     prices --> DataFrame ancho de precios (fechas x tickers)
-    m --> periodos por anio (252 diaria, 52 semanal, 12 mensual)
+    m --> periodos por año (252 diaria, 52 semanal, 12 mensual)
 
     Devuelve un DataFrame indexado por ticker con las once columnas que
     describen la muestra: fechas inicial y final, numero de rendimientos,

@@ -81,8 +81,8 @@ MERCADOS = {
 }
 
 # Bonos del Tesoro de EE.UU.; Yahoo los cotiza en puntos porcentuales
-TASAS = {"13 semanas": ("^IRX", 0.25), "5 anios": ("^FVX", 5),
-         "10 anios": ("^TNX", 10), "30 anios": ("^TYX", 30)}
+TASAS = {"13 semanas": ("^IRX", 0.25), "5 años": ("^FVX", 5),
+         "10 años": ("^TNX", 10), "30 años": ("^TYX", 30)}
 
 
 def suffix(ticker):
@@ -122,7 +122,7 @@ def fetch_market(names, start, end):
 
 
 def tenor_for(H, m):
-    """Plazo del bono mas cercano al horizonte de inversion H/m anios."""
+    """Plazo del bono mas cercano al horizonte de inversion H/m años."""
     anios = H / m
     return min(TASAS, key=lambda k: abs(TASAS[k][1] - anios))
 

@@ -1,4 +1,4 @@
-"""VaR individual, niveles de entrada y salida, y puerta de senial"""
+"""VaR individual, niveles de entrada y salida, y puerta de señal"""
 
 import numpy as np
 from scipy.stats import norm
@@ -101,7 +101,7 @@ def terminal_probs(P_t, P_BE, m, v):
     return {"win": 0.0, "lose": 0.0, "neutral": 1.0}
 
 def signal_gate(niveles, diagnosticos, sufficient, BR_min):
-    """Puerta de senial: decide si el activo pasa y por que
+    """Puerta de señal: decide si el activo pasa y por que
 
     niveles --> diccionario que devuelve levels
     diagnosticos --> diccionario que devuelve diagnostics
@@ -112,7 +112,7 @@ def signal_gate(niveles, diagnosticos, sufficient, BR_min):
     Devuelve un diccionario con cuatro claves:
       signal --> True solo si las siete reglas se cumplen
       failed --> lista con el texto de las reglas incumplidas; vacia
-                 cuando hay senial. Es lo que se muestra al usuario
+                 cuando hay señal. Es lo que se muestra al usuario
                  para justificar un rechazo
       warnings --> contrastes que rechazan y, de haberla, la muestra
                    insuficiente. No bloquean nunca

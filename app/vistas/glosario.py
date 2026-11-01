@@ -6,7 +6,7 @@ import streamlit as st
 import src.data as dt
 
 # Nombre del mercado (el de dt.MERCADOS) --> (simbolo, nombre). Todos se
-# verificaron contra Yahoo en octubre de 2026: dos anios de historia y la
+# verificaron contra Yahoo en octubre de 2026: dos años de historia y la
 # moneda que espera dt.MERCADOS.
 TICKERS = {
     "S&P 500": [
@@ -26,7 +26,7 @@ TICKERS = {
         ("DIA", "ETF Dow Jones"), ("IWM", "ETF Russell 2000"),
         ("VTI", "ETF mercado total de EE.UU."),
         ("EEM", "ETF mercados emergentes"), ("GLD", "ETF oro"),
-        ("TLT", "ETF bonos del Tesoro a mas de 20 anios"),
+        ("TLT", "ETF bonos del Tesoro a mas de 20 años"),
     ],
     "COLCAP": [
         ("ECOPETROL.CL", "Ecopetrol"),
