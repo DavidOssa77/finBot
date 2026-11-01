@@ -12,14 +12,27 @@ import streamlit as st
 # riesgo. El puntaje se lleva linealmente a A: el minimo da A_MAX (muy
 # conservador) y el maximo A_MIN (agresivo).
 PREGUNTAS = (
-    ("Horizonte de inversion",
-     ("Menos de 1 año", "De 1 a 5 años", "Mas de 5 años")),
-    ("Si el portafolio cae 20 % en un mes",
-     ("Vendo todo", "Espero", "Compro mas")),
-    ("Experiencia invirtiendo", ("Ninguna", "Algo", "Mucha")),
-    ("Objetivo", ("Preservar el capital", "Crecer moderadamente",
-                  "Maximizar el rendimiento")),
-    ("Estabilidad de ingresos", ("Baja", "Media", "Alta")),
+    ("1. ¿En cuanto tiempo necesitara este dinero?",
+     ("Menos de 2 años", "Entre 2 y 7 años", "Mas de 7 años")),
+    ("2. Si perdiera todo lo invertido, ¿como afectaria su situacion "
+     "financiera?",
+     ("Gravemente: es buena parte de mi patrimonio o no tengo fondo de "
+      "emergencia",
+      "Moderadamente: me doleria, pero cubriria mis gastos sin problema",
+      "Poco: es una fraccion pequeña de mi patrimonio")),
+    ("3. Su portafolio cae 20 % en un mes. ¿Que hace?",
+     ("Vendo para evitar mas perdidas", "Mantengo y espero la recuperacion",
+      "Aprovecho para comprar mas")),
+    ("4. ¿Cual de estas alternativas de inversion a un año prefiere?",
+     ("Ganancia segura de 6 %",
+      "Ganancia probable de 12 %, con posibilidad de perder hasta 5 %",
+      "Ganancia probable de 25 %, con posibilidad de perder hasta 20 %")),
+    ("5. ¿Cual describe mejor su experiencia invirtiendo?",
+     ("Solo he usado productos de bajo riesgo (ahorros, CDT, fondos "
+      "conservadores)",
+      "He invertido en fondos o acciones, pero nunca he vivido una caida "
+      "fuerte",
+      "He mantenido inversiones durante caidas importantes del mercado")),
 )
 A_MIN, A_MAX = 2.0, 10.0
 
@@ -56,19 +69,10 @@ def render(ctx):
         "fija (separacion de Tobin), sin endeudarse.")
 
     guardado = st.session_state.get("perfil")
-    if guardado is None:
-        st.info("Responde y pulsa **Guardar perfil** para habilitar el "
-                "resto de las vistas.")
-    else:
-        st.success(f"Perfil guardado: **{guardado['nombre']}**, "
-                   f"A = {guardado['A']:.1f}. Puedes cambiarlo cuando "
-                   "quieras.")
-
     respuestas = []
     for i, (pregunta, opciones) in enumerate(PREGUNTAS):
         previa = guardado["respuestas"][i] if guardado else 1
-        eleccion = st.radio(pregunta, opciones, index=previa,
-                            horizontal=True)
+        eleccion = st.radio(pregunta, opciones, index=previa)
         respuestas.append(opciones.index(eleccion))
     puntaje = sum(respuestas) + len(PREGUNTAS)
     A, nombre = _aversion(puntaje)
@@ -87,8 +91,19 @@ def render(ctx):
         f"lleva linealmente a A, de {A_MAX:.0f} (muy conservador) a "
         f"{A_MIN:.0f} (agresivo).")
 
-    st.button("Guardar perfil", type="primary", on_click=_guardar,
-              args=(A, nombre, respuestas))
+    # El boton y el estado del perfil van en la misma fila: el boton toma
+    # su ancho natural y el aviso ocupa el resto
+    fila = st.container(horizontal=True, vertical_alignment="center")
+    fila.button("Guardar perfil", type="primary", on_click=_guardar,
+                args=(A, nombre, respuestas), width=140)
+    aviso = fila.container()
+    if guardado is None:
+        aviso.info("Responde y pulsa **Guardar perfil** para habilitar el "
+                   "resto de las vistas.")
+    else:
+        aviso.success(f"Perfil guardado: **{guardado['nombre']}**, "
+                      f"A = {guardado['A']:.1f}. Puedes cambiarlo cuando "
+                      "quieras.")
     sin_guardar = (guardado is not None
                    and (guardado["A"], guardado["respuestas"])
                    != (A, respuestas))

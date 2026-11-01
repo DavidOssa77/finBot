@@ -27,7 +27,8 @@ def render(ctx):
         "operacion es viable una vez pagadas las comisiones, y muestra **que "
         "regla incumple** cuando no lo es. Con los activos elegidos "
         "construye portafolios de Markowitz, con rendimientos historicos o "
-        "de Black-Litterman.")
+        "de Black-Litterman, y reparte el capital entre ellos y renta fija "
+        "segun el perfil de riesgo del inversionista.")
 
     st.subheader("Convencion de rendimientos")
     st.latex(r"g_t = \ln\left(\frac{P_t}{P_{t-1}}\right)")
@@ -124,7 +125,9 @@ def render(ctx):
         "alinean a fechas comunes antes de calcular rendimientos, porque la "
         "covarianza necesita todos los activos en cada fecha. Con Yahoo, "
         "los activos extranjeros se pasan a dolares y `rf` es el bono del "
-        "Tesoro de plazo mas cercano al horizonte.")
+        "Tesoro de plazo mas cercano al horizonte. Los tres portafolios se "
+        "muestran como referencia en la frontera; el portafolio final es "
+        "el que corresponde al perfil de riesgo del inversionista.")
 
     st.subheader("Black-Litterman")
     st.markdown(
@@ -163,6 +166,44 @@ def render(ctx):
         "`mu_BL`: los rendimientos solo dependen de la confianza, y tau "
         "solo escala la incertidumbre que se suma a `Sigma`.")
 
+    st.subheader("Perfil de riesgo")
+    st.markdown(
+        "El inversionista maximiza una utilidad media-varianza, donde `A` "
+        "es su aversion al riesgo:")
+    st.latex(r"U = E[R] - \tfrac{1}{2}\,A\,\sigma^2")
+    st.markdown(
+        "**Separacion de Tobin.** El mejor portafolio riesgoso es el "
+        "tangente para todos; el perfil solo decide cuanto capital se pone "
+        "en el y cuanto en renta fija, que rinde `rf`. La fraccion optima "
+        "en el tangente es:")
+    st.latex(r"y^* = \frac{E[R_t] - r_f}{A\,\sigma_t^2}")
+    st.markdown(
+        "- **Si `y* <= 1`:** `y*` en el tangente y `1 - y*` en renta fija. "
+        "El portafolio queda sobre la linea del mercado de capitales.\n"
+        "- **Si `y* > 1`:** el inversionista querria endeudarse a `rf` para "
+        "invertir mas que su capital. Sin apalancamiento, invierte el "
+        "100 % en activos riesgosos y elige el de mayor utilidad: un punto "
+        "de la frontera entre el tangente y la maxima rentabilidad. Con "
+        "`y* = 1` los dos casos coinciden en el tangente.\n"
+        "- **Si ningun activo supera `rf`:** no hay tangente y todo va a "
+        "renta fija.")
+    st.latex(r"\max_w\; w'\mu - \tfrac{A}{2}\,w'\Sigma w \quad "
+             r"\text{s.a.}\; \textstyle\sum_i w_i = 1,\; "
+             r"0 \le w_i \le w_{max}")
+    st.markdown(
+        "**Cuestionario.** Es el punto de entrada: hasta guardarlo en la "
+        "vista Perfil de riesgo, solo se pueden abrir Metodologia y "
+        "Glosario. Cinco preguntas: horizonte de inversion, capacidad de "
+        "asumir perdidas, reaccion ante una caida del 20 % en un mes, "
+        "preferencia entre alternativas de riesgo y experiencia. "
+        "Cada respuesta vale de 1 a 3 puntos, de menos a mas tolerancia al "
+        "riesgo. El puntaje, entre 5 y 15, se lleva linealmente a `A`, "
+        "entre 10 (minimo puntaje, muy conservador) y 2 (maximo puntaje, "
+        "agresivo). Por tercios del rango, el perfil es conservador, "
+        "moderado o agresivo. La `A` se puede ajustar a mano. El perfil "
+        "guardado se usa en la vista Portafolio y dura mientras la pestaña "
+        "del navegador siga abierta.")
+
     st.subheader("Limitaciones conocidas")
     st.markdown(
         "- **La homocedasticidad no se cumple.** ARCH-LM rechaza en "
@@ -196,9 +237,12 @@ def render(ctx):
         "elegidos: es un mercado reducido, no el portafolio de mercado del "
         "CAPM. La prima de riesgo y la confianza de las visiones las fija "
         "el usuario.\n"
-        "- **El perfil de riesgo no entra en el calculo.** Un activo puede "
-        "tener el mejor cociente retorno-volatilidad y aun asi ser inadecuado "
-        "para quien lo mire.")
+        "- **El paso del cuestionario a `A` es una convencion.** El rango "
+        "de 2 a 10 y la escala lineal son supuestos razonables, no una "
+        "medicion: dos personas con el mismo puntaje pueden tolerar riesgos "
+        "distintos. Ademas, la utilidad media-varianza ignora las colas "
+        "gruesas, y la renta fija se toma sin riesgo: la tasa del bono del "
+        "Tesoro, sin riesgo de precio ni de moneda.")
 
     st.subheader("Origen de los datos")
     st.info(origen)
