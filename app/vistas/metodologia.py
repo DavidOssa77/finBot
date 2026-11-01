@@ -41,12 +41,42 @@ def render(ctx):
     st.markdown(
         f"Se ajusta el modelo **{modelo}** sobre toda la muestra:\n\n"
         "- **A** — caminata aleatoria sin deriva: impone `mu = 0`\n"
-        "- **B** — caminata con deriva: estima `mu` de la muestra\n\n"
-        "Ambos comparten la misma volatilidad, constante en el tiempo. Los "
-        "momentos se acumulan linealmente y la trayectoria es **analitica**, "
-        "no simulada:")
+        "- **B** — caminata con deriva: estima `mu` de la muestra\n"
+        "- **C** — ARIMA-GARCH: la media depende de los rendimientos "
+        "recientes y la volatilidad cambia en el tiempo\n\n"
+        "A y B comparten la misma volatilidad, constante en el tiempo. Sus "
+        "momentos se acumulan linealmente y la trayectoria es "
+        "**analitica**, no simulada:")
     st.latex(r"m = h\,\mu \qquad v = h\,\sigma^2 \qquad "
              r"P_{t+h} = P_t\,e^{\,m + z_p\sqrt{v}}")
+    st.markdown(
+        "**Modelo C.** Los log-precios no son estacionarios, los "
+        "log-rendimientos si; por eso la media se modela con un "
+        "ARIMA(p,1,q) sobre el log-precio, que equivale a un ARMA(p,q) con "
+        "constante (la deriva) sobre el log-rendimiento. Se comparan "
+        "ARIMA(1,1,1), ARIMA(0,1,1) y ARIMA(1,1,0) y se elige el de menor "
+        "AIC: por maxima verosimilitud ganaria siempre el (1,1,1), que "
+        "contiene a los otros dos. Sobre sus residuos se estima un "
+        "GARCH(1,1) con innovaciones t-Student, que captura las rachas de "
+        "volatilidad y las colas gruesas:")
+    st.latex(r"g_t = c + \phi\,(g_{t-1} - c) + \varepsilon_t + "
+             r"\theta\,\varepsilon_{t-1} \qquad "
+             r"\varepsilon_t = \sigma_t z_t,\; z_t \sim t_\nu")
+    st.latex(r"\sigma_t^2 = \omega + \alpha\,\varepsilon_{t-1}^2 + "
+             r"\beta\,\sigma_{t-1}^2")
+    st.markdown(
+        "La media acumulada suma los rendimientos que pronostica el ARIMA. "
+        "En la varianza, cada choque futuro tiene la varianza que "
+        "pronostica el GARCH y se propaga a los rendimientos siguientes con "
+        "los pesos `psi` del ARMA:")
+    st.latex(r"v_h = \sum_{j=1}^{h} \sigma_{t+j}^2\, \Psi_{h-j}^2 \qquad "
+             r"\Psi_n = \sum_{k=0}^{n} \psi_k")
+    st.markdown(
+        "Con `alfa + beta < 1` la volatilidad condicional vuelve a la "
+        "incondicional `raiz(omega / (1 - alfa - beta))`. Los niveles, el "
+        "VaR y la señal se calculan igual que en A y B a partir de `m` y "
+        "`v`. En el walk-forward el modelo completo, eleccion de orden "
+        "incluida, se reestima en cada origen.")
 
     st.subheader("Niveles, costos y señal")
     st.markdown(
@@ -212,9 +242,15 @@ def render(ctx):
     st.markdown(
         "- **La homocedasticidad no se cumple.** ARCH-LM rechaza en "
         "practicamente cualquier serie financiera: la volatilidad viene por "
-        "rachas. El modelo usa una volatilidad unica, asi que los intervalos "
-        "son correctos en promedio pero mal calibrados en cada momento. La "
-        "extension natural seria un GARCH, a costa de perder la forma cerrada.\n"
+        "rachas. Los modelos A y B usan una volatilidad unica, asi que sus "
+        "intervalos son correctos en promedio pero mal calibrados en cada "
+        "momento. El modelo C lo corrige con un GARCH.\n"
+        "- **El modelo C aproxima la distribucion acumulada.** Usa la media "
+        "y la varianza exactas del rendimiento acumulado, pero toma sus "
+        "cuantiles de una normal: las colas t-Student de cada periodo se "
+        "suavizan al sumar varios, pero a horizontes cortos el VaR puede "
+        "quedarse corto. Ademas, con series sinteticas como el fixture el "
+        "GARCH puede quedar en la frontera (alfa + beta cerca de 1).\n"
         "- **El VaR parametrico supone normalidad.** Con colas gruesas "
         "subestima la perdida extrema. No es la perdida maxima posible ni dice "
         "cuanto se pierde mas alla del cuantil.\n"

@@ -75,7 +75,9 @@ def render(ctx):
                        "apunta siempre en el sentido de la deriva estimada, asi "
                        "que la metrica termina midiendo cuantas ventanas se "
                        "movieron en ese sentido, no la capacidad predictiva del "
-                       "modelo.")
+                       "modelo. En el modelo C el signo depende tambien de "
+                       "los ultimos rendimientos (la parte ARIMA), asi que "
+                       "si mide algo de capacidad predictiva.")
     else:
         st.info(f"Muestra insuficiente: {wf['T']} rendimientos, "
                 f"hacen falta {wf['required']}.")

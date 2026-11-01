@@ -6,12 +6,13 @@ from plotly.subplots import make_subplots
 
 TEMA = "plotly_white"
 
-def price_chart(prices, drawdown, ticker):
+def price_chart(prices, drawdown, ticker, moneda):
     """Precio y caida desde maximos, en dos paneles con eje de fechas comun
 
     prices --> Serie de precios ajustados
     drawdown --> Serie D_t, la primera salida de analytics.drawdown
     ticker --> nombre del activo, solo para el titulo
+    moneda --> moneda en que cotiza, para rotular el eje
 
     Devuelve una figura de Plotly; no la muestra
     """
@@ -24,7 +25,7 @@ def price_chart(prices, drawdown, ticker):
     fig.add_trace(go.Scatter(x=drawdown.index, y=drawdown, name="drawdown",
                              fill="tozeroy", line=dict(width=1)), row=2, col=1)
 
-    fig.update_yaxes(title_text="USD", row=1, col=1)
+    fig.update_yaxes(title_text=moneda, row=1, col=1)
     fig.update_yaxes(title_text="caida", tickformat=".0%", row=2, col=1)
     fig.update_layout(template=TEMA, height=540, showlegend=False,
                       hovermode="x unified",
@@ -70,13 +71,14 @@ def comparison_map(comp):
         legend=dict(orientation="h", y=-0.15))
     return fig
 
-def projection_chart(P_t, trayectoria, ticker, p_L, p_U):
+def projection_chart(P_t, trayectoria, ticker, moneda, p_L, p_U):
     """Banda de cuantiles, mediana y media a lo largo del horizonte.
 
     P_t --> ultimo precio, el punto de partida
     trayectoria --> DataFrame como el que devuelve forecasting.path,
                     con columnas h, median, mean, q_L y q_U
     ticker --> nombre del activo, para el titulo
+    moneda --> moneda en que cotiza, para rotular el eje
     p_L, p_U --> probabilidades de cola, solo para rotular la banda
     """
     t = trayectoria
@@ -103,8 +105,39 @@ def projection_chart(P_t, trayectoria, ticker, p_L, p_U):
     fig.update_layout(
         template=TEMA, height=480, hovermode="x unified",
         title=f"{ticker} - proyeccion a {int(t['h'].max())} periodos",
-        xaxis=dict(title="horizonte h"), yaxis=dict(title="precio (USD)"),
+        xaxis=dict(title="horizonte h"),
+        yaxis=dict(title=f"precio ({moneda})"),
         legend=dict(orientation="h", y=-0.18))
+    return fig
+
+def cond_vol_chart(vol_cond, vol_incond, vol_muestral, ticker):
+    """Volatilidad condicional del GARCH frente a la constante.
+
+    vol_cond --> Serie de volatilidad condicional anualizada por fecha
+    vol_incond --> volatilidad incondicional anualizada del GARCH, o None
+                   si no existe (persistencia >= 1)
+    vol_muestral --> desviacion muestral anualizada, la de los modelos A
+                     y B
+    ticker --> nombre del activo, para el titulo
+    """
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=vol_cond.index, y=vol_cond, mode="lines",
+        name="condicional (GARCH)", line=dict(width=1.5),
+        hovertemplate="%{x|%Y-%m-%d}<br>%{y:.1%}<extra></extra>"))
+    fig.add_hline(y=vol_muestral, line=dict(width=1.5, dash="dash"),
+                  annotation_text=f"muestral (A y B) {vol_muestral:.1%}",
+                  annotation_position="top left")
+    if vol_incond is not None:
+        fig.add_hline(y=vol_incond, line=dict(width=1.5, dash="dot"),
+                      annotation_text=f"incondicional GARCH {vol_incond:.1%}",
+                      annotation_position="bottom left")
+    fig.update_layout(
+        template=TEMA, height=420,
+        title=f"{ticker} - volatilidad condicional vs incondicional",
+        yaxis=dict(title="volatilidad anualizada", tickformat=".0%",
+                   rangemode="tozero"),
+        showlegend=False)
     return fig
 
 def returns_hist(g, ticker, bins=40):

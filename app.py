@@ -64,7 +64,11 @@ H = st.sidebar.number_input("Horizonte H", min_value=1, value=20,
                                  "elegida. Un horizonte largo frente a la "
                                  "historia disponible deja sin validar el "
                                  "walk-forward.")
-modelo = st.sidebar.selectbox("Modelo", ["A", "B"])
+modelo = st.sidebar.selectbox(
+    "Modelo", ["A", "B", "C"],
+    help="A: caminata aleatoria sin deriva. B: con deriva. C: ARIMA-GARCH, "
+         "media que depende del pasado y volatilidad condicional; tarda "
+         "unos segundos por activo.")
 
 params = ct.Params(
     cost_buy=st.sidebar.number_input("Comision compra", 0.0, 0.05, 0.0, 0.0005, "%.4f"),
