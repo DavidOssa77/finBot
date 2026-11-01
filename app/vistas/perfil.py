@@ -34,7 +34,7 @@ PREGUNTAS = (
       "fuerte",
       "He mantenido inversiones durante caidas importantes del mercado")),
 )
-A_MIN, A_MAX = 2.0, 10.0
+A_MIN, A_MAX = 0.1, 10.0
 
 
 def _aversion(puntaje):
@@ -88,8 +88,8 @@ def render(ctx):
     k3.metric("Aversion al riesgo A", f"{A:.1f}")
     st.caption(
         f"El puntaje va de {len(PREGUNTAS)} a {3 * len(PREGUNTAS)} y se "
-        f"lleva linealmente a A, de {A_MAX:.0f} (muy conservador) a "
-        f"{A_MIN:.0f} (agresivo).")
+        f"lleva linealmente a A, de {A_MAX:g} (muy conservador) a "
+        f"{A_MIN:g} (agresivo).")
 
     # El boton y el estado del perfil van en la misma fila: el boton toma
     # su ancho natural y el aviso ocupa el resto
