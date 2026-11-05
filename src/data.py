@@ -1,8 +1,14 @@
 """Carga, validacion y remuestreo de precios ajustados"""
 
+import threading
+
 import pandas as pd
 import yfinance as yf
 PERIODOS_POR_ANIO = {"D": 252, "W-FRI": 52, "ME": 12}
+# yf.download guarda sus resultados en un diccionario global que reinicia en
+# cada llamada: dos descargas simultaneas (otra pestaña, otro usuario o una
+# ejecucion anterior de Streamlit) reciben los datos de la otra.
+_CERROJO_DESCARGA = threading.Lock()
 
 def load_fixture(path):
     """Carga el fixture del curso y devuelve la matriz de precios.
@@ -17,10 +23,12 @@ def _download(ticker, start, end):
     """Descarga el cierre ajustado de un simbolo.
 
     Devuelve (serie, None) si respondio o (None, motivo) si fallo.
+    Las descargas se hacen de una en una, ver _CERROJO_DESCARGA.
     """
     try:
-        df = yf.download(ticker, start=start, end=end,
-                         auto_adjust=True, progress=False)
+        with _CERROJO_DESCARGA:
+            df = yf.download(ticker, start=start, end=end,
+                             auto_adjust=True, progress=False)
     except Exception as e:
         return None, f"fallo la descarga: {e}"
 
