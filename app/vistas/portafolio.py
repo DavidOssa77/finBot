@@ -6,10 +6,34 @@ import pandas as pd
 import streamlit as st
 
 import src.black_litterman as bl
+import src.capm as cm
 import src.data as dt
 import src.portfolio as pf
 from app import charts
-from app.contexto import descargar_capitalizacion, descargar_fx, descargar_tasa
+from app.contexto import (descargar_capitalizacion, descargar_fx,
+                          descargar_mercado, descargar_tasa)
+
+BENCHMARK = "S&P 500"
+# Clave de performance_metrics, nombre en la tabla, formato y explicacion
+METRICAS = (
+    ("return", "Rendimiento anual", "{:.2%}", "Media historica anualizada"),
+    ("volatility", "Volatilidad anual", "{:.2%}", "Riesgo total"),
+    ("sharpe", "Sharpe", "{:.3f}", "Exceso por unidad de riesgo total"),
+    ("sortino", "Sortino", "{:.3f}", "Exceso por unidad de riesgo a la baja"),
+    ("beta", "Beta", "{:.3f}", "Sensibilidad al benchmark"),
+    ("alpha", "Alfa de Jensen anual", "{:.2%}",
+     "Rendimiento sobre lo que justifica su beta"),
+    ("treynor", "Treynor", "{:.4f}",
+     "Exceso por unidad de riesgo sistematico"),
+    ("m2", "M2", "{:.2%}",
+     "Rendimiento con la volatilidad del benchmark"),
+    ("r2", "R2", "{:.3f}", "Parte sistematica de la varianza"),
+    ("max_drawdown", "Caida maxima", "{:.2%}", "Peor caida desde un maximo"),
+    ("var", "VaR 95 % (por periodo)", "{:.2%}",
+     "Cuantil historico de perdida"),
+    ("cvar", "CVaR 95 % (por periodo)", "{:.2%}",
+     "Perdida media cuando se supera el VaR"),
+)
 
 FUENTES_MU = ("Historicos", "Black-Litterman")
 COLUMNAS_VISTAS = ("tipo", "activo", "contra", "rendimiento (%)",
@@ -344,6 +368,71 @@ def _asignacion(mu, Sigma, rf, w_max, resumen):
     return r
 
 
+def _benchmark(precios, ctx):
+    """Precios del benchmark, su nombre y un aviso o None.
+
+    Con Yahoo es el S&P 500; con el fixture, o si la descarga falla, un
+    proxy equiponderado de los activos, en la moneda del portafolio.
+    """
+    if ctx.fuente == "Yahoo Finance":
+        indices, errores = descargar_mercado(
+            (BENCHMARK,), str(ctx.inicio), str(ctx.fin))
+        if not errores:
+            simbolo, serie = indices[BENCHMARK]
+            return serie, f"{BENCHMARK} ({simbolo})", None
+        return (cm.equal_weight_index(precios), "proxy equiponderado",
+                f"No se pudo descargar el {BENCHMARK}: se compara contra un "
+                "proxy equiponderado de los activos elegidos.")
+    return (cm.equal_weight_index(ctx.precios_diarios),
+            "proxy equiponderado del fixture", None)
+
+
+def _texto(valor, formato):
+    """Valor con su formato, o n/d si la razon no esta definida."""
+    if pd.isna(valor):
+        return "n/d"
+    # Un residuo de redondeo como -1e-17 no debe mostrarse como -0.00 %
+    return formato.format(0.0 if abs(valor) < 1e-12 else valor)
+
+
+def _metricas(R, pesos, r, rf, m, precios, ctx):
+    """Tabla de desempeño ex post de los portafolios contra el benchmark.
+
+    R --> rendimientos simples historicos de los activos
+    pesos --> pesos de los portafolios de referencia
+    r --> asignacion del inversionista
+    precios --> precios de los activos, para fechar el benchmark
+    """
+    st.subheader("Metricas de desempeño")
+    serie, nombre, aviso = _benchmark(precios, ctx)
+    if aviso:
+        st.warning(aviso)
+    Rm = pf.benchmark_returns(serie, precios, ctx.ajustes["freq"])
+
+    columnas = {"tu portafolio": pf.portfolio_returns(
+        R, r["weights"], rf / m)}
+    for portafolio in pesos:
+        columnas[portafolio] = pf.portfolio_returns(R, pesos[portafolio])
+    columnas["benchmark"] = Rm
+    resultado = {c: pf.performance_metrics(rp, Rm, rf, m)
+                 for c, rp in columnas.items()}
+
+    tabla = pd.DataFrame(
+        {c: [_texto(x[clave], formato) for clave, _, formato, _ in METRICAS]
+         for c, x in resultado.items()},
+        index=[metrica[1] for metrica in METRICAS])
+    tabla.insert(0, "que mide", [metrica[3] for metrica in METRICAS])
+    # Alto de todas las filas mas el encabezado (35 px cada una), sin barra
+    st.dataframe(tabla, width="stretch", height=35 * (len(tabla) + 1) + 3)
+    st.caption(
+        f"Benchmark: {nombre}. Medidas ex post: cada portafolio mantiene "
+        "sus pesos fijos sobre los rendimientos historicos, rebalanceando "
+        f"cada periodo sin costos, con rf = {rf:.2%}. Siempre se miden con "
+        "lo que realmente ocurrio, aunque los pesos vengan de "
+        "Black-Litterman. n/d: la razon no esta definida, como con todo el "
+        "capital en renta fija.")
+
+
 def render(ctx):
     """Dibuja la vista con el contexto comun y los ajustes de controles."""
     st.subheader("Construccion del portafolio")
@@ -424,6 +513,8 @@ def render(ctx):
     final = pd.concat([r["weights"], pd.Series({"renta fija": r["w_rf"]})])
     st.plotly_chart(charts.weights_chart(final[final > 1e-9],
                                          "tu portafolio"), width="stretch")
+
+    _metricas(R, pesos, r, rf, m, precios, ctx)
 
     with st.expander("Comparar los portafolios de referencia"):
         st.dataframe(resumen[["return", "volatility"]].rename(columns={

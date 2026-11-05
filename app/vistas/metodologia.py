@@ -252,6 +252,35 @@ def render(ctx):
         "guardado se usa en la vista Portafolio y dura mientras la pestaña "
         "del navegador siga abierta.")
 
+    st.subheader("Metricas de desempeño")
+    st.markdown(
+        "La vista Portafolio mide cada portafolio **ex post**: con sus pesos "
+        "fijos arma la serie de rendimientos simples historicos y la compara "
+        "contra un benchmark, el S&P 500 con Yahoo y un proxy equiponderado "
+        r"con el fixture. Con $R_p$, $R_m$ y $\sigma$ anualizados y "
+        r"$r_f$ constante:")
+    st.latex(r"\text{Sharpe} = \frac{R_p - r_f}{\sigma_p} \qquad "
+             r"\text{Treynor} = \frac{R_p - r_f}{\beta_p} \qquad "
+             r"\alpha = R_p - r_f - \beta_p\,(R_m - r_f)")
+    st.markdown(
+        "**Sortino** cambia la volatilidad total por la volatilidad a la "
+        "baja: solo cuentan los periodos que rinden menos que la tasa libre "
+        "de riesgo. Asi no castiga las subidas fuertes:")
+    st.latex(r"\text{Sortino} = \frac{R_p - r_f}{\sigma_d} \qquad "
+             r"\sigma_d = \sqrt{\frac{m}{T} \sum_{t=1}^{T} "
+             r"\min\left(R_{p,t} - \frac{r_f}{m},\, 0\right)^2}")
+    st.markdown(
+        "**M2 (Modigliani)** expresa el Sharpe en rendimiento: cuanto "
+        "rendiria el portafolio si, mezclandolo con renta fija, tuviera la "
+        "misma "
+        "volatilidad que el benchmark. Se compara directamente con $R_m$:")
+    st.latex(r"M^2 = r_f + \frac{R_p - r_f}{\sigma_p}\,\sigma_m")
+    st.markdown(
+        "El **VaR** y el **CVaR** de la tabla son historicos y por periodo: "
+        "el cuantil de perdida y la perdida media cuando se supera ese "
+        "cuantil. Son distintos del VaR parametrico a `H` periodos de la "
+        "vista Resumen.")
+
     st.subheader("Limitaciones conocidas")
     st.markdown(
         "- **La homocedasticidad no se cumple.** ARCH-LM rechaza en "
@@ -291,6 +320,19 @@ def render(ctx):
         "elegidos: es un mercado reducido, no el portafolio de mercado del "
         "CAPM. La prima de riesgo y la confianza de las visiones las fija "
         "el usuario.\n"
+        "- **Las metricas de desempeño son dentro de la muestra.** Los pesos "
+        "se optimizan y se miden con los mismos datos, asi que el tangente "
+        "con rendimientos historicos sale favorecido. Ademas suponen "
+        "rebalanceo en cada periodo sin costos y `rf` constante.\n"
+        "- **El S&P 500 no representa a los activos de otros mercados.** El "
+        "portafolio se compara contra ese indice aunque incluya activos que "
+        "no hacen parte de el. Rendimiento, volatilidad y M2 siguen siendo "
+        "comparables, como un costo de oportunidad en la misma moneda. Con "
+        "activos extranjeros, en cambio, beta, alfa de Jensen, Treynor y R2 "
+        "son solo orientativos: la beta sale baja, el alfa se infla y parte "
+        "de lo que parece riesgo no sistematico es el riesgo de esos otros "
+        "mercados y de sus monedas. Tampoco son comparables con la vista "
+        "CAPM, que mide cada activo contra el indice de su pais.\n"
         "- **El paso del cuestionario a `A` es una convencion.** El rango "
         "de 0.1 a 10 y la escala lineal son supuestos razonables, no una "
         "medicion: dos personas con el mismo puntaje pueden tolerar riesgos "

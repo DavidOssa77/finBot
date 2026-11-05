@@ -74,6 +74,10 @@ Para cada activo estima el modelo de mercado en excesos,
   separación de Tobin, `y* = (E[R_t] - rf) / (A σ_t²)` decide qué parte del
   capital va al tangente y qué parte a renta fija; si `y* > 1`, sin
   apalancamiento, se elige el portafolio de máxima utilidad sobre la frontera.
+- **Métricas de desempeño** del portafolio del inversionista, los tres de
+  referencia y el benchmark (S&P 500, o un proxy equiponderado con el fixture):
+  Sharpe, Sortino, beta, alfa de Jensen, Treynor, M², R², caída máxima, VaR y
+  CVaR históricos.
 
 ---
 
@@ -215,6 +219,9 @@ Las ampliaciones se verifican contra propiedades teóricas con el fixture:
   fracción de confianza; la forma usada coincide con la fórmula maestra.
 - **Perfil de riesgo**: con `y* ≤ 1` el portafolio cae sobre la línea del
   mercado de capitales; con `y* = 1` los dos casos coinciden en el tangente.
+- **Métricas de desempeño**: Sharpe coincide con el de la frontera; beta, alfa y
+  R² con una regresión MCO; el benchmark contra sí mismo da β = 1, α = 0 y
+  M² = R_m; Sharpe, M² y Treynor no cambian al mezclar con renta fija.
 - **Modelo C**: la media y la varianza acumuladas coinciden con una simulación
   Monte Carlo del ARMA-GARCH ajustado (error menor al 1 %), y A y B dan
   exactamente los mismos resultados que antes de agregarlo.
@@ -249,6 +256,13 @@ Medidas sobre los datos del proyecto y declaradas en la vista *Metodología* de 
   cambios pequeños en la muestra mueven mucho los pesos.
 - **Black-Litterman usa la capitalización de hoy** y solo de los activos
   elegidos, no la del periodo analizado.
+- **Las métricas de desempeño son dentro de la muestra**: los pesos se optimizan
+  y se miden con los mismos datos, con rebalanceo sin costos y `rf` constante.
+- **El S&P 500 no representa a los activos de otros mercados.** El portafolio se
+  compara contra ese índice aunque incluya activos que no hacen parte de él.
+  Rendimiento, volatilidad y M² siguen siendo comparables, pero beta, alfa,
+  Treynor y R² son solo orientativos con activos extranjeros, y no son comparables
+  con la vista CAPM, que mide cada activo contra el índice de su país.
 - **El paso del cuestionario a `A` es una convención**: el rango de 0.1 a 10 y
   la escala lineal son supuestos razonables, no una medición.
 
