@@ -345,3 +345,21 @@ def bl_returns_chart(tabla):
         yaxis=dict(title="rendimiento esperado anual", tickformat=".1%"),
         legend=dict(orientation="h", y=-0.15))
     return fig
+
+
+def correlation_chart(corr):
+    """Mapa de calor de la matriz de correlaciones de los rendimientos.
+
+    corr --> DataFrame cuadrado de correlaciones, indexado por ticker
+    """
+    fig = go.Figure(go.Heatmap(
+        z=corr.to_numpy(), x=corr.columns, y=corr.index,
+        zmin=-1, zmax=1, colorscale="RdBu_r",
+        text=corr.to_numpy(), texttemplate="%{text:.2f}",
+        hovertemplate="<b>%{y} - %{x}</b><br>correlacion %{z:.2f}"
+                      "<extra></extra>"))
+    fig.update_layout(
+        template=TEMA, height=max(320, 60 * len(corr) + 120),
+        title="Correlacion entre los rendimientos",
+        yaxis=dict(autorange="reversed"))
+    return fig

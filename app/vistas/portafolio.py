@@ -477,6 +477,11 @@ def render(ctx):
                  "cotizan: no alcanza para estimar la covarianza.")
         return
     mu, Sigma = pf.moments(R, m)
+    with st.expander("Matriz de correlaciones"):
+        st.plotly_chart(charts.correlation_chart(R.corr()), width="stretch")
+        st.caption(
+            f"Correlacion de Pearson de los rendimientos en los {len(R)} "
+            f"periodos comunes, frecuencia {freq}.")
     if fuente_mu == "Black-Litterman":
         resultado = _black_litterman(mu, Sigma, rf, ctx)
         if resultado is None:
